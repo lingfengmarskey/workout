@@ -286,11 +286,11 @@ private final class BodyCameraGuideView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         titleLabel.frame = CGRect(x: 28, y: safeAreaInsets.top + 18, width: bounds.width - 56, height: 44)
+        voiceLabel.frame = CGRect(x: 28, y: safeAreaInsets.top + 68, width: bounds.width - 56, height: 40)
         hintLabel.frame = CGRect(x: 28, y: bounds.height - safeAreaInsets.bottom - 190, width: bounds.width - 56, height: 48)
-        voiceLabel.frame = CGRect(x: 28, y: bounds.height - safeAreaInsets.bottom - 136, width: bounds.width - 56, height: 40)
 
         let centerX = bounds.midX
-        let top = safeAreaInsets.top + 85
+        let top = safeAreaInsets.top + 118
         let bottom = bounds.height - safeAreaInsets.bottom - 215
         let height = max(bottom - top, 220)
         let shoulder = min(bounds.width * 0.28, height * 0.18)
