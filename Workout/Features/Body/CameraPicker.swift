@@ -73,8 +73,14 @@ struct CameraPicker: UIViewControllerRepresentable {
                 message: warnings.map { "• \($0)" }.joined(separator: "\n"),
                 preferredStyle: .alert
             )
-            alert.addAction(UIAlertAction(title: "重新拍摄", style: .default) { [parent] _ in
-                parent.onRetake()
+            alert.addAction(UIAlertAction(title: "重新拍摄", style: .default) { [weak picker, parent] _ in
+                guard let presenter = picker?.presentingViewController else {
+                    parent.onRetake()
+                    return
+                }
+                presenter.dismiss(animated: true) {
+                    parent.onRetake()
+                }
             })
             alert.addAction(UIAlertAction(title: "仍然使用", style: .destructive) { [parent] _ in
                 parent.onImage(image)

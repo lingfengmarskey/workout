@@ -94,7 +94,7 @@ struct BodyRecordView: View {
                 onRetake: {
                     cameraAngle = nil
                     Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(350))
+                        try? await Task.sleep(for: .milliseconds(150))
                         cameraAngle = angle
                     }
                 },
