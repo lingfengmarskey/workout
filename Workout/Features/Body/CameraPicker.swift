@@ -6,6 +6,7 @@ struct CameraPicker: UIViewControllerRepresentable {
     let guideTitle: String
     let progressText: String
     let onImage: (UIImage) -> Void
+    let onRetake: () -> Void
     let onCancel: () -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -52,7 +53,39 @@ struct CameraPicker: UIViewControllerRepresentable {
                 parent.onCancel()
                 return
             }
-            parent.onImage(image)
+            Task { @MainActor in
+                let result = await BodyPhotoQualityAnalyzer.analyze(image)
+                guard !result.isAcceptable else {
+                    parent.onImage(image)
+                    return
+                }
+                presentQualityWarning(result.warnings, image: image, in: picker)
+            }
+        }
+
+        private func presentQualityWarning(
+            _ warnings: [String],
+            image: UIImage,
+            in picker: UIImagePickerController
+        ) {
+            let alert = UIAlertController(
+                title: "建议重新拍摄",
+                message: warnings.map { "• \($0)" }.joined(separator: "\n"),
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "重新拍摄", style: .default) { [weak picker, parent] _ in
+                guard let presenter = picker?.presentingViewController else {
+                    parent.onRetake()
+                    return
+                }
+                presenter.dismiss(animated: true) {
+                    parent.onRetake()
+                }
+            })
+            alert.addAction(UIAlertAction(title: "仍然使用", style: .destructive) { [parent] _ in
+                parent.onImage(image)
+            })
+            picker.present(alert, animated: true)
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
