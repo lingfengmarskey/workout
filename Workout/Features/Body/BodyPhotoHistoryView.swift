@@ -85,6 +85,14 @@ struct BodyPhotoComparisonView: View {
     let records: [DailyBodyRecord]
     @State private var angle: HistoryPhotoAngle = .front
     @State private var preview: HistoryPhotoPreview?
+    @State private var useAlignment = true
+    @State private var alignedImages: [UUID: UIImage] = [:]
+    @State private var alignmentMessage: String?
+    @State private var isAligning = false
+
+    private var alignmentTaskID: String {
+        records.map { angle.identifier(in: $0) ?? "missing" }.joined(separator: "|")
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -93,6 +101,19 @@ struct BodyPhotoComparisonView: View {
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
+
+            HStack {
+                Toggle("自动对齐", isOn: $useAlignment)
+                if isAligning { ProgressView().controlSize(.small) }
+            }
+            .padding(.horizontal)
+
+            if let alignmentMessage, useAlignment {
+                Label(alignmentMessage, systemImage: "info.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+            }
 
             HStack(alignment: .top, spacing: 8) {
                 ForEach(records) { record in comparisonColumn(record) }
@@ -103,10 +124,12 @@ struct BodyPhotoComparisonView: View {
         .navigationTitle("体型对比")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: $preview) { BodyPhotoPreviewView(image: $0.image, title: $0.title) }
+        .task(id: alignmentTaskID) { await loadAlignedImages() }
     }
 
     private func comparisonColumn(_ record: DailyBodyRecord) -> some View {
-        let image = BodyPhotoStore.shared.image(for: angle.identifier(in: record))
+        let originalImage = BodyPhotoStore.shared.image(for: angle.identifier(in: record))
+        let image = useAlignment ? (alignedImages[record.id] ?? originalImage) : originalImage
         return VStack(spacing: 8) {
             Text(record.date.formatted(date: .abbreviated, time: .omitted)).font(.headline)
             if let image {
@@ -123,6 +146,29 @@ struct BodyPhotoComparisonView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    @MainActor
+    private func loadAlignedImages() async {
+        alignedImages = [:]
+        alignmentMessage = nil
+        guard records.count == 2,
+              let first = BodyPhotoStore.shared.image(for: angle.identifier(in: records[0])),
+              let second = BodyPhotoStore.shared.image(for: angle.identifier(in: records[1])) else {
+            alignmentMessage = "当前角度缺少照片，无法自动对齐。"
+            return
+        }
+
+        isAligning = true
+        defer { isAligning = false }
+        switch await BodyPhotoAlignmentService.align(first: first, second: second) {
+        case let .success(alignedFirst, alignedSecond):
+            alignedImages[records[0].id] = alignedFirst
+            alignedImages[records[1].id] = alignedSecond
+            alignmentMessage = "已按人体高度、中心和脚底基线对齐展示副本。"
+        case let .failure(message):
+            alignmentMessage = message
+        }
     }
 }
 
