@@ -6,7 +6,7 @@ struct PlanOverviewView: View {
     @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
-    @State private var displayMode: PlanDisplayMode = .month
+    @AppStorage("plan.overview.displayMode") private var displayMode: PlanDisplayMode = .month
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
