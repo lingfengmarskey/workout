@@ -3,8 +3,10 @@ import SwiftUI
 
 struct PlanOverviewView: View {
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
+    @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
+    @State private var displayMode: PlanDisplayMode = .calendar
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -13,7 +15,34 @@ struct PlanOverviewView: View {
     var body: some View {
         Group {
             if let plan = activePlan {
-                List {
+                VStack(spacing: 0) {
+                    Picker("显示方式", selection: $displayMode) {
+                        ForEach(PlanDisplayMode.allCases) { mode in Text(mode.title).tag(mode) }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding()
+
+                    if displayMode == .calendar {
+                        PlanCalendarView(
+                            plan: plan,
+                            bodyRecords: bodyRecords,
+                            mealPlans: mealPlans,
+                            workoutPlans: workoutPlans
+                        )
+                    } else {
+                        dailyList(plan: plan)
+                    }
+                }
+                .navigationTitle("计划")
+            } else {
+                ContentUnavailableView("没有计划", systemImage: "calendar.badge.exclamationmark")
+                    .navigationTitle("计划")
+            }
+        }
+    }
+
+    private func dailyList(plan: WeightLossPlan) -> some View {
+        List {
                     Section {
                         LabeledContent("开始", value: plan.startDate.formatted(date: .abbreviated, time: .omitted))
                         LabeledContent("阶段目标", value: formattedWeight(plan.phaseTargetWeight))
@@ -56,17 +85,17 @@ struct PlanOverviewView: View {
                         }
                     }
                 }
-                .navigationTitle("计划")
-            } else {
-                ContentUnavailableView("没有计划", systemImage: "calendar.badge.exclamationmark")
-                    .navigationTitle("计划")
-            }
         }
-    }
 
     private func formattedWeight(_ value: Double) -> String {
         "\(value.formatted(.number.precision(.fractionLength(1)))) kg"
     }
+}
+
+private enum PlanDisplayMode: String, CaseIterable, Identifiable {
+    case calendar, list
+    var id: String { rawValue }
+    var title: String { self == .calendar ? "日历" : "列表" }
 }
 
 struct MealPlanDetailView: View {
