@@ -23,6 +23,10 @@ struct CameraPicker: UIViewControllerRepresentable {
             guard let controller else { return }
             coordinator?.startVoiceShutter(for: controller, guideView: guideView)
         }
+        controller.onRetakeControlTapped = { [weak controller, weak coordinator = context.coordinator] in
+            guard let controller else { return }
+            coordinator?.resumeVoiceShutterAfterRetake(in: controller)
+        }
         return controller
     }
 
@@ -31,9 +35,9 @@ struct CameraPicker: UIViewControllerRepresentable {
     final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
         private let parent: CameraPicker
         private let voiceShutter = VoiceShutterController()
-        private weak var cameraContentViewController: UIViewController?
         private weak var guideView: BodyCameraGuideView?
         private var isWaitingForRetake = false
+        private var retakeWorkItem: DispatchWorkItem?
 
         init(parent: CameraPicker) {
             self.parent = parent
@@ -58,7 +62,6 @@ struct CameraPicker: UIViewControllerRepresentable {
 
         fileprivate func startVoiceShutter(for picker: UIImagePickerController, guideView: BodyCameraGuideView) {
             self.guideView = guideView
-            cameraContentViewController = cameraContentViewController ?? picker.topViewController
             voiceShutter.start(
                 statusChanged: { status in guideView.setVoiceStatus(status) },
                 capture: { [weak picker, weak guideView] in
@@ -69,36 +72,65 @@ struct CameraPicker: UIViewControllerRepresentable {
             )
         }
 
-        func navigationController(
-            _ navigationController: UINavigationController,
-            willShow viewController: UIViewController,
-            animated: Bool
-        ) {
-            guard
-                isWaitingForRetake,
-                viewController === cameraContentViewController,
-                let picker = navigationController as? UIImagePickerController,
-                let guideView
-            else { return }
+        fileprivate func resumeVoiceShutterAfterRetake(in picker: UIImagePickerController) {
+            guard isWaitingForRetake else { return }
+            retakeWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self, weak picker] in
+                guard
+                    let self,
+                    let picker,
+                    self.isWaitingForRetake,
+                    picker.viewIfLoaded?.window != nil,
+                    let guideView = self.guideView
+                else { return }
 
-            isWaitingForRetake = false
-            guideView.setVoiceStatus("已返回拍摄画面，正在恢复语音快门…")
-            startVoiceShutter(for: picker, guideView: guideView)
+                self.isWaitingForRetake = false
+                guideView.setVoiceStatus("已返回拍摄画面，正在恢复语音快门…")
+                self.startVoiceShutter(for: picker, guideView: guideView)
+            }
+            retakeWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: workItem)
         }
 
         private func stopVoiceShutter() {
+            retakeWorkItem?.cancel()
+            retakeWorkItem = nil
             isWaitingForRetake = false
             voiceShutter.stop()
         }
     }
 }
 
-private final class VoiceShutterImagePickerController: UIImagePickerController {
+private final class VoiceShutterImagePickerController: UIImagePickerController, UIGestureRecognizerDelegate {
     var onDidAppear: (() -> Void)?
+    var onRetakeControlTapped: (() -> Void)?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let tapRecognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        tapRecognizer.cancelsTouchesInView = false
+        tapRecognizer.delegate = self
+        view.addGestureRecognizer(tapRecognizer)
+    }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         onDidAppear?()
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+
+    @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
+        let location = recognizer.location(in: view)
+        let isRetakeControlArea = location.x <= view.bounds.width * 0.5
+            && location.y >= view.bounds.height * 0.6
+        guard isRetakeControlArea else { return }
+        onRetakeControlTapped?()
     }
 }
 
