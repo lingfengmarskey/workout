@@ -25,6 +25,7 @@ struct ProgressDashboardView: View {
 
                 if let plan = activePlan {
                     weightChart(plan: plan)
+                    if !waistRecords.isEmpty { waistChart }
                     weeklyReviews(plan: plan)
                 }
 
@@ -152,6 +153,16 @@ struct ProgressDashboardView: View {
                         .symbolSize(18)
                     }
                 }
+
+                ForEach(sevenDayAveragePoints) { point in
+                    LineMark(
+                        x: .value("日期", point.date),
+                        y: .value("体重", point.value)
+                    )
+                    .foregroundStyle(by: .value("系列", "7日平均"))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+                }
             }
             .chartLegend(position: .bottom)
             .frame(height: 280)
@@ -161,6 +172,33 @@ struct ProgressDashboardView: View {
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         .contentShape(Rectangle())
         .onTapGesture { showFullScreenWeightChart = true }
+    }
+
+    private var waistChart: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("腰围趋势").font(.headline)
+            Chart(waistRecords) { record in
+                if let waist = record.waist {
+                    LineMark(x: .value("日期", record.date), y: .value("腰围", waist))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                    PointMark(x: .value("日期", record.date), y: .value("腰围", waist))
+                        .symbolSize(18)
+                }
+            }
+            .frame(height: 200)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var waistRecords: [DailyBodyRecord] {
+        guard let plan = activePlan else { return [] }
+        return records.filter { $0.planID == plan.id && $0.waist != nil }.sorted { $0.date < $1.date }
+    }
+
+    private var sevenDayAveragePoints: [WeightAveragePoint] {
+        ProgressTrendCalculator.sevenDayWeightAverage(records: weightedRecords)
     }
 
     private var latestWeight: Double? {

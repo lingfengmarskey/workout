@@ -94,6 +94,13 @@ struct FullScreenWeightChartView: View {
                 }
             }
 
+            ForEach(visibleAveragePoints) { point in
+                LineMark(x: .value("日期", point.date), y: .value("7日平均", point.value))
+                    .foregroundStyle(by: .value("系列", "7日平均"))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+            }
+
             if let selectedRecord, let weight = selectedRecord.actualWeight {
                 RuleMark(x: .value("选择日期", selectedRecord.date))
                     .foregroundStyle(.secondary.opacity(0.55))
@@ -190,6 +197,11 @@ struct FullScreenWeightChartView: View {
 
     private var visibleRecords: [DailyBodyRecord] {
         records.filter { domain.contains($0.date) && $0.actualWeight != nil }
+    }
+
+    private var visibleAveragePoints: [WeightAveragePoint] {
+        ProgressTrendCalculator.sevenDayWeightAverage(records: records)
+            .filter { domain.contains($0.date) }
     }
 
     private var selectedRecord: DailyBodyRecord? {
