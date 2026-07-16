@@ -10,6 +10,7 @@ struct BodyRecordView: View {
 
     @State private var cameraAngle: BodyPhotoAngle?
     @State private var pendingCameraAngle: BodyPhotoAngle?
+    @State private var previewAngle: BodyPhotoAngle?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -92,6 +93,13 @@ struct BodyRecordView: View {
             )
             .ignoresSafeArea()
         }
+        .fullScreenCover(item: $previewAngle) { angle in
+            if let image = BodyPhotoStore.shared.image(for: photoIdentifier(for: angle)) {
+                BodyPhotoPreviewView(image: image, title: "\(angle.title)体型照片")
+            } else {
+                BodyPhotoUnavailablePreviewView()
+            }
+        }
         .alert("无法处理照片", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -166,12 +174,18 @@ struct BodyRecordView: View {
     @ViewBuilder
     private func photoThumbnail(for angle: BodyPhotoAngle) -> some View {
         if let image = BodyPhotoStore.shared.image(for: photoIdentifier(for: angle)) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 72, height: 96)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .accessibilityLabel("\(angle.title)体型照片")
+            Button {
+                previewAngle = angle
+            } label: {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 72, height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("预览\(angle.title)体型照片")
+            .accessibilityHint("全屏打开照片，可放大和拖动")
         } else {
             Image(systemName: "person.crop.rectangle")
                 .font(.title)
