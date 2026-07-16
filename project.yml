@@ -26,6 +26,8 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: true
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 用于选择和保存体型记录照片。
         INFOPLIST_KEY_NSCameraUsageDescription: 用于拍摄正面、侧面和背面体型照片。
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: 用于在拍摄体型照片时识别“拍照”语音口令。
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: 用于识别“拍照”或“茄子”口令并自动触发相机快门。
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
