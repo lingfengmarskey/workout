@@ -25,6 +25,9 @@ struct SettingsView: View {
                     LabeledContent("起始体重", value: formattedWeight(plan.startWeight))
                     LabeledContent("阶段目标", value: formattedWeight(plan.phaseTargetWeight))
                     LabeledContent("长期目标", value: formattedWeight(plan.finalTargetWeight))
+                    NavigationLink("编辑当前计划") {
+                        PlanEditView(plan: plan)
+                    }
                 }
 
                 Section("每日目标") {
