@@ -224,7 +224,7 @@ struct FullScreenWeightChartView: View {
     }
 }
 
-private enum ChartTimeRange: String, CaseIterable, Identifiable {
+enum ChartTimeRange: String, CaseIterable, Identifiable {
     case week, month, plan
     var id: String { rawValue }
     var title: String { self == .week ? "7天" : (self == .month ? "30天" : "全计划") }
@@ -232,7 +232,7 @@ private enum ChartTimeRange: String, CaseIterable, Identifiable {
 }
 
 @MainActor
-private enum OrientationController {
+enum OrientationController {
     static func request(_ orientation: UIInterfaceOrientationMask) {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientation))

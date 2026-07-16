@@ -8,6 +8,7 @@ struct ProgressDashboardView: View {
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
     @State private var showFullScreenWeightChart = false
+    @State private var showFullScreenWaistChart = false
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -44,6 +45,11 @@ struct ProgressDashboardView: View {
         .fullScreenCover(isPresented: $showFullScreenWeightChart) {
             if let plan = activePlan {
                 FullScreenWeightChartView(plan: plan, records: weightedRecords)
+            }
+        }
+        .fullScreenCover(isPresented: $showFullScreenWaistChart) {
+            if let plan = activePlan {
+                FullScreenWaistChartView(plan: plan, records: waistRecords)
             }
         }
     }
@@ -176,7 +182,13 @@ struct ProgressDashboardView: View {
 
     private var waistChart: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("腰围趋势").font(.headline)
+            HStack {
+                Text("腰围趋势").font(.headline)
+                Spacer()
+                Label("全屏查看", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+            }
             Chart(waistRecords) { record in
                 if let waist = record.waist {
                     LineMark(x: .value("日期", record.date), y: .value("腰围", waist))
@@ -190,6 +202,8 @@ struct ProgressDashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+        .contentShape(Rectangle())
+        .onTapGesture { showFullScreenWaistChart = true }
     }
 
     private var waistRecords: [DailyBodyRecord] {
