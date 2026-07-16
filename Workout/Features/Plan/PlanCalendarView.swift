@@ -5,28 +5,30 @@ struct PlanCalendarView: View {
     let bodyRecords: [DailyBodyRecord]
     let mealPlans: [DailyMealPlan]
     let workoutPlans: [DailyWorkoutPlan]
+    let showsCurrentWeek: Bool
 
-    @State private var visibleMonth: Date
+    @State private var visiblePeriod: Date
     private let calendar = Calendar.current
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
 
-    init(plan: WeightLossPlan, bodyRecords: [DailyBodyRecord], mealPlans: [DailyMealPlan], workoutPlans: [DailyWorkoutPlan]) {
+    init(plan: WeightLossPlan, bodyRecords: [DailyBodyRecord], mealPlans: [DailyMealPlan], workoutPlans: [DailyWorkoutPlan], showsCurrentWeek: Bool) {
         self.plan = plan
         self.bodyRecords = bodyRecords
         self.mealPlans = mealPlans
         self.workoutPlans = workoutPlans
+        self.showsCurrentWeek = showsCurrentWeek
         let today = Calendar.current.startOfDay(for: .now)
         let initial = min(max(today, plan.startDate), plan.endDate)
-        _visibleMonth = State(initialValue: Calendar.current.dateInterval(of: .month, for: initial)?.start ?? initial)
+        _visiblePeriod = State(initialValue: initial)
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                monthHeader
+                periodHeader
                 weekdayHeader
                 LazyVGrid(columns: columns, spacing: 8) {
-                    ForEach(monthCells) { cell in
+                    ForEach(calendarCells) { cell in
                         if let date = cell.date {
                             dayCell(date)
                         } else {
@@ -41,15 +43,15 @@ struct PlanCalendarView: View {
         }
     }
 
-    private var monthHeader: some View {
+    private var periodHeader: some View {
         HStack {
-            Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }
-                .disabled(!canMoveMonth(-1))
+            Button { movePeriod(-1) } label: { Image(systemName: "chevron.left") }
+                .disabled(!canMovePeriod(-1))
             Spacer()
-            Text(visibleMonth.formatted(.dateTime.year().month(.wide))).font(.title3.bold())
+            Text(periodTitle).font(.title3.bold())
             Spacer()
-            Button { moveMonth(1) } label: { Image(systemName: "chevron.right") }
-                .disabled(!canMoveMonth(1))
+            Button { movePeriod(1) } label: { Image(systemName: "chevron.right") }
+                .disabled(!canMovePeriod(1))
         }
     }
 
@@ -132,9 +134,13 @@ struct PlanCalendarView: View {
     private func mealPlan(on date: Date) -> DailyMealPlan? { mealPlans.first { $0.planID == plan.id && calendar.isDate($0.date, inSameDayAs: date) } }
     private func workoutPlan(on date: Date) -> DailyWorkoutPlan? { workoutPlans.first { $0.planID == plan.id && calendar.isDate($0.date, inSameDayAs: date) } }
 
-    private var monthCells: [CalendarCell] {
-        guard let interval = calendar.dateInterval(of: .month, for: visibleMonth),
-              let days = calendar.range(of: .day, in: .month, for: visibleMonth) else { return [] }
+    private var calendarCells: [CalendarCell] {
+        if showsCurrentWeek {
+            guard let start = calendar.dateInterval(of: .weekOfYear, for: visiblePeriod)?.start else { return [] }
+            return (0..<7).map { CalendarCell(date: calendar.date(byAdding: .day, value: $0, to: start)) }
+        }
+        guard let interval = calendar.dateInterval(of: .month, for: visiblePeriod),
+              let days = calendar.range(of: .day, in: .month, for: visiblePeriod) else { return [] }
         let weekday = calendar.component(.weekday, from: interval.start)
         let leading = (weekday - calendar.firstWeekday + 7) % 7
         return Array(repeating: CalendarCell(date: nil), count: leading) + days.compactMap {
@@ -142,9 +148,22 @@ struct PlanCalendarView: View {
         }
     }
 
-    private func moveMonth(_ offset: Int) { visibleMonth = calendar.date(byAdding: .month, value: offset, to: visibleMonth) ?? visibleMonth }
-    private func canMoveMonth(_ offset: Int) -> Bool {
-        guard let month = calendar.date(byAdding: .month, value: offset, to: visibleMonth), let interval = calendar.dateInterval(of: .month, for: month) else { return false }
+    private var periodTitle: String {
+        if showsCurrentWeek, let interval = calendar.dateInterval(of: .weekOfYear, for: visiblePeriod), let end = calendar.date(byAdding: .day, value: 6, to: interval.start) {
+            return interval.start.formatted(.dateTime.month().day()) + " – " + end.formatted(.dateTime.month().day())
+        }
+        return visiblePeriod.formatted(.dateTime.year().month(.wide))
+    }
+
+    private func movePeriod(_ offset: Int) {
+        let component: Calendar.Component = showsCurrentWeek ? .weekOfYear : .month
+        visiblePeriod = calendar.date(byAdding: component, value: offset, to: visiblePeriod) ?? visiblePeriod
+    }
+
+    private func canMovePeriod(_ offset: Int) -> Bool {
+        let component: Calendar.Component = showsCurrentWeek ? .weekOfYear : .month
+        guard let target = calendar.date(byAdding: component, value: offset, to: visiblePeriod),
+              let interval = calendar.dateInterval(of: component, for: target) else { return false }
         return interval.end > plan.startDate && interval.start <= plan.endDate
     }
 }

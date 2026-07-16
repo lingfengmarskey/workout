@@ -6,7 +6,7 @@ struct PlanOverviewView: View {
     @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
-    @State private var displayMode: PlanDisplayMode = .calendar
+    @State private var displayMode: PlanDisplayMode = .month
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -16,24 +16,36 @@ struct PlanOverviewView: View {
         Group {
             if let plan = activePlan {
                 VStack(spacing: 0) {
-                    Picker("显示方式", selection: $displayMode) {
-                        ForEach(PlanDisplayMode.allCases) { mode in Text(mode.title).tag(mode) }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding()
-
-                    if displayMode == .calendar {
+                    if displayMode != .list {
                         PlanCalendarView(
                             plan: plan,
                             bodyRecords: bodyRecords,
                             mealPlans: mealPlans,
-                            workoutPlans: workoutPlans
+                            workoutPlans: workoutPlans,
+                            showsCurrentWeek: displayMode == .week
                         )
+                        .id(displayMode)
                     } else {
                         dailyList(plan: plan)
                     }
                 }
                 .navigationTitle("计划")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            ForEach(PlanDisplayMode.allCases) { mode in
+                                Button {
+                                    displayMode = mode
+                                } label: {
+                                    Label(mode.title, systemImage: displayMode == mode ? "checkmark" : mode.icon)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: displayMode.icon)
+                        }
+                        .accessibilityLabel("切换计划显示方式，当前为\(displayMode.title)")
+                    }
+                }
             } else {
                 ContentUnavailableView("没有计划", systemImage: "calendar.badge.exclamationmark")
                     .navigationTitle("计划")
@@ -93,9 +105,14 @@ struct PlanOverviewView: View {
 }
 
 private enum PlanDisplayMode: String, CaseIterable, Identifiable {
-    case calendar, list
+    case month, week, list
     var id: String { rawValue }
-    var title: String { self == .calendar ? "日历" : "列表" }
+    var title: String {
+        switch self { case .month: "月历"; case .week: "当前周"; case .list: "列表" }
+    }
+    var icon: String {
+        switch self { case .month: "calendar"; case .week: "calendar.day.timeline.left"; case .list: "list.bullet" }
+    }
 }
 
 struct MealPlanDetailView: View {
