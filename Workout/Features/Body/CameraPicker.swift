@@ -31,6 +31,7 @@ struct CameraPicker: UIViewControllerRepresentable {
     final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
         private let parent: CameraPicker
         private let voiceShutter = VoiceShutterController()
+        private var rearmWorkItem: DispatchWorkItem?
 
         init(parent: CameraPicker) {
             self.parent = parent
@@ -40,7 +41,7 @@ struct CameraPicker: UIViewControllerRepresentable {
             _ picker: UIImagePickerController,
             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
         ) {
-            voiceShutter.stop()
+            stopVoiceShutter()
             guard let image = info[.originalImage] as? UIImage else {
                 parent.onCancel()
                 return
@@ -49,7 +50,7 @@ struct CameraPicker: UIViewControllerRepresentable {
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            voiceShutter.stop()
+            stopVoiceShutter()
             parent.onCancel()
         }
 
@@ -59,8 +60,29 @@ struct CameraPicker: UIViewControllerRepresentable {
                 capture: { [weak picker, weak guideView] in
                     guideView?.setVoiceStatus("已识别“拍照”，正在拍摄…")
                     picker?.takePicture()
+                    self.scheduleVoiceShutterRearm(for: picker, guideView: guideView)
                 }
             )
+        }
+
+        private func scheduleVoiceShutterRearm(
+            for picker: UIImagePickerController?,
+            guideView: BodyCameraGuideView?
+        ) {
+            rearmWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self, weak picker, weak guideView] in
+                guard let self, let picker, let guideView else { return }
+                guideView.setVoiceStatus("如需重拍，说“拍照”或“茄子”即可再次拍摄")
+                self.startVoiceShutter(for: picker, guideView: guideView)
+            }
+            rearmWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
+        }
+
+        private func stopVoiceShutter() {
+            rearmWorkItem?.cancel()
+            rearmWorkItem = nil
+            voiceShutter.stop()
         }
     }
 }
