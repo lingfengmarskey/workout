@@ -121,7 +121,7 @@ struct ProgressDashboardView: View {
                             y: .value("体重", plan.plannedWeight(on: date))
                         )
                         .foregroundStyle(by: .value("系列", "计划"))
-                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
                     }
                 }
 
@@ -132,11 +132,13 @@ struct ProgressDashboardView: View {
                             y: .value("体重", weight)
                         )
                         .foregroundStyle(by: .value("系列", "实际"))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
                         PointMark(
                             x: .value("日期", record.date),
                             y: .value("体重", weight)
                         )
                         .foregroundStyle(by: .value("系列", "实际"))
+                        .symbolSize(18)
                     }
                 }
             }
