@@ -52,15 +52,6 @@ struct FullScreenWeightChartView: View {
             }
             .pickerStyle(.segmented)
 
-            if selectedRecord != nil {
-                Button {
-                    selectedDate = nil
-                } label: {
-                    Label("清除选择", systemImage: "xmark.circle")
-                }
-                .buttonStyle(.bordered)
-            }
-
             if range != .plan {
                 Button { moveWindow(by: -range.dayCount) } label: {
                     Image(systemName: "chevron.left")
@@ -146,24 +137,38 @@ struct FullScreenWeightChartView: View {
     @ViewBuilder
     private var selectionArea: some View {
         if let record = selectedRecord, let weight = record.actualWeight {
-            NavigationLink {
-                BodyRecordView(record: record, plan: plan)
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "scalemass.fill").foregroundStyle(.tint)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(record.date.formatted(date: .complete, time: .omitted)).font(.caption).foregroundStyle(.secondary)
-                        Text("\(weight.formatted(.number.precision(.fractionLength(1)))) kg").font(.headline)
-                    }
-                    Spacer()
-                    Text("查看当天详情").font(.subheadline)
-                    Image(systemName: "chevron.right").font(.caption)
+            HStack(spacing: 10) {
+                Button {
+                    selectedDate = nil
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .background(.thinMaterial, in: Circle())
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .buttonStyle(.plain)
+                .accessibilityLabel("清除体重选择")
+
+                NavigationLink {
+                    BodyRecordView(record: record, plan: plan)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "scalemass.fill").foregroundStyle(.tint)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(record.date.formatted(date: .complete, time: .omitted)).font(.caption).foregroundStyle(.secondary)
+                            Text("\(weight.formatted(.number.precision(.fractionLength(1)))) kg").font(.headline)
+                        }
+                        Spacer()
+                        Text("查看当天详情").font(.subheadline)
+                        Image(systemName: "chevron.right").font(.caption)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         } else {
             Text("点击体重点查看日期和体重")
                 .font(.footnote)
