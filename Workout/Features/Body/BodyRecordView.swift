@@ -77,6 +77,8 @@ struct BodyRecordView: View {
         }
         .fullScreenCover(item: $cameraAngle) { angle in
             CameraPicker(
+                guideTitle: "拍摄\(angle.title)体型照片",
+                progressText: angle.progressText,
                 onImage: { image in
                     cameraAngle = nil
                     guard let data = image.jpegData(compressionQuality: 1) else {
@@ -318,5 +320,9 @@ private enum BodyPhotoAngle: String, Identifiable {
         case .side: "侧面"
         case .back: "背面"
         }
+    }
+
+    var progressText: String {
+        switch self { case .front: "1/3"; case .side: "2/3"; case .back: "3/3" }
     }
 }
