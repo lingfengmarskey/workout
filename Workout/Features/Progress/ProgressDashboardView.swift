@@ -5,6 +5,9 @@ import SwiftUI
 struct ProgressDashboardView: View {
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
     @Query(sort: \DailyBodyRecord.date) private var records: [DailyBodyRecord]
+    @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
+    @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
+    @State private var showFullScreenWeightChart = false
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -22,6 +25,7 @@ struct ProgressDashboardView: View {
 
                 if let plan = activePlan {
                     weightChart(plan: plan)
+                    weeklyReviews(plan: plan)
                 }
 
                 if weightedRecords.isEmpty {
@@ -36,6 +40,40 @@ struct ProgressDashboardView: View {
             .padding()
         }
         .navigationTitle("进度")
+        .fullScreenCover(isPresented: $showFullScreenWeightChart) {
+            if let plan = activePlan {
+                FullScreenWeightChartView(plan: plan, records: weightedRecords)
+            }
+        }
+    }
+
+    private func weeklyReviews(plan: WeightLossPlan) -> some View {
+        let summaries = WeeklyReviewCalculator.summaries(
+            plan: plan,
+            bodyRecords: records,
+            mealPlans: mealPlans,
+            workoutPlans: workoutPlans
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("每周复盘").font(.headline)
+            if summaries.isEmpty {
+                Text("计划开始后会在这里显示每周汇总。")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(summaries) { summary in
+                    NavigationLink {
+                        WeeklyReviewDetailView(summary: summary, plan: plan, mealPlans: mealPlans, workoutPlans: workoutPlans)
+                    } label: {
+                        WeeklyReviewRow(summary: summary)
+                    }
+                    .buttonStyle(.plain)
+                    if summary.id != summaries.last?.id { Divider() }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
     }
 
     @ViewBuilder
@@ -78,8 +116,13 @@ struct ProgressDashboardView: View {
 
     private func weightChart(plan: WeightLossPlan) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("体重趋势")
-                .font(.headline)
+            HStack {
+                Text("体重趋势").font(.headline)
+                Spacer()
+                Label("全屏查看", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+            }
 
             Chart {
                 ForEach(0..<plan.durationDays, id: \.self) { day in
@@ -89,7 +132,7 @@ struct ProgressDashboardView: View {
                             y: .value("体重", plan.plannedWeight(on: date))
                         )
                         .foregroundStyle(by: .value("系列", "计划"))
-                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
                     }
                 }
 
@@ -100,11 +143,13 @@ struct ProgressDashboardView: View {
                             y: .value("体重", weight)
                         )
                         .foregroundStyle(by: .value("系列", "实际"))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
                         PointMark(
                             x: .value("日期", record.date),
                             y: .value("体重", weight)
                         )
                         .foregroundStyle(by: .value("系列", "实际"))
+                        .symbolSize(18)
                     }
                 }
             }
@@ -114,6 +159,8 @@ struct ProgressDashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+        .contentShape(Rectangle())
+        .onTapGesture { showFullScreenWeightChart = true }
     }
 
     private var latestWeight: Double? {

@@ -2,7 +2,14 @@ import SwiftData
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
+    @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
+    @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
+    @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
+
+    @State private var showTestDataConfirmation = false
+    @State private var testDataMessage: String?
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -55,11 +62,58 @@ struct SettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+#if DEBUG
+            if activePlan != nil {
+                Section("开发与测试") {
+                    Button("生成 4 周周报测试数据", role: .destructive) {
+                        showTestDataConfirmation = true
+                    }
+                    Text("仅 Debug 构建显示。会把当前计划移动到 28 天前，并覆盖最近 29 天的身体、饮食和锻炼记录。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+#endif
         }
         .navigationTitle("设置")
+#if DEBUG
+        .confirmationDialog("生成测试数据？", isPresented: $showTestDataConfirmation, titleVisibility: .visible) {
+            Button("确认生成", role: .destructive) { generateTestData() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("此操作会覆盖当前计划最近 29 天的测试字段，请勿用于真实记录。")
+        }
+        .alert("周报测试数据", isPresented: Binding(
+            get: { testDataMessage != nil },
+            set: { if !$0 { testDataMessage = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(testDataMessage ?? "")
+        }
+#endif
     }
 
     private func formattedWeight(_ value: Double) -> String {
         "\(value.formatted(.number.precision(.fractionLength(1)))) kg"
     }
+
+#if DEBUG
+    private func generateTestData() {
+        guard let plan = activePlan else { return }
+        do {
+            try WeeklyReviewTestData.generate(
+                plan: plan,
+                bodyRecords: bodyRecords,
+                mealPlans: mealPlans,
+                workoutPlans: workoutPlans,
+                in: modelContext
+            )
+            testDataMessage = "已生成 29 天数据。请打开“进度”查看 4 个周报和不同调整建议。"
+        } catch {
+            testDataMessage = "生成失败：\(error.localizedDescription)"
+        }
+    }
+#endif
 }
