@@ -94,6 +94,13 @@ struct FullScreenWeightChartView: View {
                 }
             }
 
+            ForEach(visibleAveragePoints) { point in
+                LineMark(x: .value("日期", point.date), y: .value("7日平均", point.value))
+                    .foregroundStyle(by: .value("系列", "7日平均"))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+            }
+
             if let selectedRecord, let weight = selectedRecord.actualWeight {
                 RuleMark(x: .value("选择日期", selectedRecord.date))
                     .foregroundStyle(.secondary.opacity(0.55))
@@ -192,6 +199,11 @@ struct FullScreenWeightChartView: View {
         records.filter { domain.contains($0.date) && $0.actualWeight != nil }
     }
 
+    private var visibleAveragePoints: [WeightAveragePoint] {
+        ProgressTrendCalculator.sevenDayWeightAverage(records: records)
+            .filter { domain.contains($0.date) }
+    }
+
     private var selectedRecord: DailyBodyRecord? {
         guard let selectedDate else { return nil }
         return visibleRecords.min {
@@ -212,7 +224,7 @@ struct FullScreenWeightChartView: View {
     }
 }
 
-private enum ChartTimeRange: String, CaseIterable, Identifiable {
+enum ChartTimeRange: String, CaseIterable, Identifiable {
     case week, month, plan
     var id: String { rawValue }
     var title: String { self == .week ? "7天" : (self == .month ? "30天" : "全计划") }
@@ -220,7 +232,7 @@ private enum ChartTimeRange: String, CaseIterable, Identifiable {
 }
 
 @MainActor
-private enum OrientationController {
+enum OrientationController {
     static func request(_ orientation: UIInterfaceOrientationMask) {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientation))
