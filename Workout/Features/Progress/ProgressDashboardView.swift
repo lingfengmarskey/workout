@@ -27,6 +27,7 @@ struct ProgressDashboardView: View {
                 if let plan = activePlan {
                     weightChart(plan: plan)
                     if !waistRecords.isEmpty { waistChart }
+                    if !photoRecords.isEmpty { photoHistoryCard(plan: plan) }
                     weeklyReviews(plan: plan)
                 }
 
@@ -52,6 +53,26 @@ struct ProgressDashboardView: View {
                 FullScreenWaistChartView(plan: plan, records: waistRecords)
             }
         }
+    }
+
+    private func photoHistoryCard(plan: WeightLossPlan) -> some View {
+        NavigationLink {
+            BodyPhotoHistoryView(plan: plan, records: photoRecords)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "photo.on.rectangle.angled").font(.title2).foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("体型照片历史").font(.headline)
+                    Text("\(photoRecords.count) 个拍摄日期 · 支持双日期对比")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+        }
+        .buttonStyle(.plain)
     }
 
     private func weeklyReviews(plan: WeightLossPlan) -> some View {
@@ -209,6 +230,13 @@ struct ProgressDashboardView: View {
     private var waistRecords: [DailyBodyRecord] {
         guard let plan = activePlan else { return [] }
         return records.filter { $0.planID == plan.id && $0.waist != nil }.sorted { $0.date < $1.date }
+    }
+
+    private var photoRecords: [DailyBodyRecord] {
+        guard let plan = activePlan else { return [] }
+        return records.filter {
+            $0.planID == plan.id && ($0.frontPhotoPath != nil || $0.sidePhotoPath != nil || $0.backPhotoPath != nil)
+        }.sorted { $0.date > $1.date }
     }
 
     private var sevenDayAveragePoints: [WeightAveragePoint] {
