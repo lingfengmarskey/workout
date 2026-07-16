@@ -18,6 +18,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lingfengmarskey.workout
         PRODUCT_NAME: Workout
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: E393H8D2JP
+        CODE_SIGN_IDENTITY: Apple Development
         GENERATE_INFOPLIST_FILE: true
         INFOPLIST_KEY_CFBundleDisplayName: 减脂计划
         INFOPLIST_KEY_UILaunchScreen_Generation: true
