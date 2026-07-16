@@ -3,8 +3,10 @@ import SwiftUI
 
 struct PlanOverviewView: View {
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
+    @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
+    @AppStorage("plan.overview.displayMode") private var displayMode: PlanDisplayMode = .month
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -13,7 +15,46 @@ struct PlanOverviewView: View {
     var body: some View {
         Group {
             if let plan = activePlan {
-                List {
+                VStack(spacing: 0) {
+                    if displayMode != .list {
+                        PlanCalendarView(
+                            plan: plan,
+                            bodyRecords: bodyRecords,
+                            mealPlans: mealPlans,
+                            workoutPlans: workoutPlans,
+                            showsCurrentWeek: displayMode == .week
+                        )
+                        .id(displayMode)
+                    } else {
+                        dailyList(plan: plan)
+                    }
+                }
+                .navigationTitle("计划")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            ForEach(PlanDisplayMode.allCases) { mode in
+                                Button {
+                                    displayMode = mode
+                                } label: {
+                                    Label(mode.title, systemImage: displayMode == mode ? "checkmark" : mode.icon)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: displayMode.icon)
+                        }
+                        .accessibilityLabel("切换计划显示方式，当前为\(displayMode.title)")
+                    }
+                }
+            } else {
+                ContentUnavailableView("没有计划", systemImage: "calendar.badge.exclamationmark")
+                    .navigationTitle("计划")
+            }
+        }
+    }
+
+    private func dailyList(plan: WeightLossPlan) -> some View {
+        List {
                     Section {
                         LabeledContent("开始", value: plan.startDate.formatted(date: .abbreviated, time: .omitted))
                         LabeledContent("阶段目标", value: formattedWeight(plan.phaseTargetWeight))
@@ -56,16 +97,21 @@ struct PlanOverviewView: View {
                         }
                     }
                 }
-                .navigationTitle("计划")
-            } else {
-                ContentUnavailableView("没有计划", systemImage: "calendar.badge.exclamationmark")
-                    .navigationTitle("计划")
-            }
         }
-    }
 
     private func formattedWeight(_ value: Double) -> String {
         "\(value.formatted(.number.precision(.fractionLength(1)))) kg"
+    }
+}
+
+private enum PlanDisplayMode: String, CaseIterable, Identifiable {
+    case month, week, list
+    var id: String { rawValue }
+    var title: String {
+        switch self { case .month: "月历"; case .week: "当前周"; case .list: "列表" }
+    }
+    var icon: String {
+        switch self { case .month: "calendar"; case .week: "calendar.day.timeline.left"; case .list: "list.bullet" }
     }
 }
 
