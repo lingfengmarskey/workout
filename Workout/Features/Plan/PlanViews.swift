@@ -16,7 +16,7 @@ struct PlanOverviewView: View {
                 List {
                     Section {
                         LabeledContent("开始", value: plan.startDate.formatted(date: .abbreviated, time: .omitted))
-                        LabeledContent("阶段目标", value: "\(plan.phaseTargetWeight, specifier: "%.1f") kg")
+                        LabeledContent("阶段目标", value: formattedWeight(plan.phaseTargetWeight))
                         LabeledContent("周期", value: "\(plan.durationDays) 天")
                     } header: {
                         Text(plan.name)
@@ -63,6 +63,10 @@ struct PlanOverviewView: View {
             }
         }
     }
+
+    private func formattedWeight(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(1)))) kg"
+    }
 }
 
 struct MealPlanDetailView: View {
@@ -106,7 +110,10 @@ struct MealPlanDetailView: View {
             Section("全天目标") {
                 LabeledContent("热量", value: "\(plan.plannedCalories) kcal")
                 LabeledContent("蛋白质", value: "\(plan.plannedProtein) g")
-                LabeledContent("饮水", value: "\(plan.waterTarget, specifier: "%.1f") L")
+                LabeledContent(
+                    "饮水",
+                    value: "\(plan.waterTarget.formatted(.number.precision(.fractionLength(1)))) L"
+                )
             }
 
             Section("感受与备注") {
