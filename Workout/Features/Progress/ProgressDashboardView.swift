@@ -5,6 +5,8 @@ import SwiftUI
 struct ProgressDashboardView: View {
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
     @Query(sort: \DailyBodyRecord.date) private var records: [DailyBodyRecord]
+    @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
+    @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -22,6 +24,7 @@ struct ProgressDashboardView: View {
 
                 if let plan = activePlan {
                     weightChart(plan: plan)
+                    weeklyReviews(plan: plan)
                 }
 
                 if weightedRecords.isEmpty {
@@ -36,6 +39,35 @@ struct ProgressDashboardView: View {
             .padding()
         }
         .navigationTitle("进度")
+    }
+
+    private func weeklyReviews(plan: WeightLossPlan) -> some View {
+        let summaries = WeeklyReviewCalculator.summaries(
+            plan: plan,
+            bodyRecords: records,
+            mealPlans: mealPlans,
+            workoutPlans: workoutPlans
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("每周复盘").font(.headline)
+            if summaries.isEmpty {
+                Text("计划开始后会在这里显示每周汇总。")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(summaries) { summary in
+                    NavigationLink {
+                        WeeklyReviewDetailView(summary: summary, plan: plan, mealPlans: mealPlans, workoutPlans: workoutPlans)
+                    } label: {
+                        WeeklyReviewRow(summary: summary)
+                    }
+                    .buttonStyle(.plain)
+                    if summary.id != summaries.last?.id { Divider() }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
     }
 
     @ViewBuilder
