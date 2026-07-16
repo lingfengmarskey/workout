@@ -26,6 +26,10 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: true
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 用于选择和保存体型记录照片。
         INFOPLIST_KEY_NSCameraUsageDescription: 用于拍摄正面、侧面和背面体型照片。
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         TARGETED_DEVICE_FAMILY: "1"
     scheme:
       gatherCoverageData: false

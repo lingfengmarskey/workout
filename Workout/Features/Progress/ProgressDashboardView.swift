@@ -7,6 +7,7 @@ struct ProgressDashboardView: View {
     @Query(sort: \DailyBodyRecord.date) private var records: [DailyBodyRecord]
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
+    @State private var showFullScreenWeightChart = false
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -39,6 +40,11 @@ struct ProgressDashboardView: View {
             .padding()
         }
         .navigationTitle("进度")
+        .fullScreenCover(isPresented: $showFullScreenWeightChart) {
+            if let plan = activePlan {
+                FullScreenWeightChartView(plan: plan, records: weightedRecords)
+            }
+        }
     }
 
     private func weeklyReviews(plan: WeightLossPlan) -> some View {
@@ -110,8 +116,13 @@ struct ProgressDashboardView: View {
 
     private func weightChart(plan: WeightLossPlan) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("体重趋势")
-                .font(.headline)
+            HStack {
+                Text("体重趋势").font(.headline)
+                Spacer()
+                Label("全屏查看", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+            }
 
             Chart {
                 ForEach(0..<plan.durationDays, id: \.self) { day in
@@ -148,6 +159,8 @@ struct ProgressDashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+        .contentShape(Rectangle())
+        .onTapGesture { showFullScreenWeightChart = true }
     }
 
     private var latestWeight: Double? {
