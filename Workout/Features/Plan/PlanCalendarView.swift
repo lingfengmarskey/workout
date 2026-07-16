@@ -82,6 +82,13 @@ struct PlanCalendarView: View {
     }
 
     private func dayCellContent(_ date: Date, enabled: Bool) -> some View {
+        if showsCurrentWeek {
+            return AnyView(weekDayCellContent(date, enabled: enabled))
+        }
+        return AnyView(monthDayCellContent(date, enabled: enabled))
+    }
+
+    private func monthDayCellContent(_ date: Date, enabled: Bool) -> some View {
         VStack(spacing: 7) {
             Text(date.formatted(.dateTime.day()))
                 .font(.subheadline.weight(calendar.isDateInToday(date) ? .bold : .regular))
@@ -96,9 +103,57 @@ struct PlanCalendarView: View {
         .background(calendar.isDateInToday(date) ? Color.accentColor.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
     }
 
+    private func weekDayCellContent(_ date: Date, enabled: Bool) -> some View {
+        VStack(spacing: 5) {
+            Text(date.formatted(.dateTime.day()))
+                .font(.subheadline.weight(calendar.isDateInToday(date) ? .bold : .regular))
+
+            if enabled {
+                eventChip(bodyText(date), color: bodyColor(date))
+                eventChip(mealText(date), color: mealColor(date))
+                eventChip(workoutText(date), color: workoutColor(date))
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .top)
+        .padding(.vertical, 6)
+        .foregroundStyle(enabled ? Color.primary : Color.secondary.opacity(0.45))
+        .background(calendar.isDateInToday(date) ? Color.accentColor.opacity(0.1) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func eventChip(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption2)
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.22), in: RoundedRectangle(cornerRadius: 4))
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 2)
+            }
+    }
+
+    private func bodyText(_ date: Date) -> String {
+        guard date <= calendar.startOfDay(for: .now) else { return "体 计划" }
+        guard let weight = bodyRecord(on: date)?.actualWeight else { return "体 未记" }
+        return "体 \(weight.formatted(.number.precision(.fractionLength(1))))"
+    }
+
+    private func mealText(_ date: Date) -> String {
+        guard date <= calendar.startOfDay(for: .now) else { return "餐 计划" }
+        guard let meal = mealPlan(on: date) else { return "餐 未记" }
+        return "餐 \(meal.completedMealCount)/4"
+    }
+
+    private func workoutText(_ date: Date) -> String {
+        guard date <= calendar.startOfDay(for: .now) else { return "练 计划" }
+        return "练 \(workoutPlan(on: date)?.status.displayName ?? "未记")"
+    }
+
     private var legend: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("圆点顺序：体重 · 饮食 · 锻炼").foregroundStyle(.secondary)
+            Text(showsCurrentWeek ? "周历标签：体重 · 饮食 · 锻炼" : "圆点顺序：体重 · 饮食 · 锻炼").foregroundStyle(.secondary)
             HStack { legendItem("完成", .green); legendItem("部分", .yellow); legendItem("未完成", .red); legendItem("未记录", .gray); legendItem("未来", .blue.opacity(0.45)) }
         }
         .font(.caption)
