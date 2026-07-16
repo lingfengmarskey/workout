@@ -31,7 +31,9 @@ struct CameraPicker: UIViewControllerRepresentable {
     final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
         private let parent: CameraPicker
         private let voiceShutter = VoiceShutterController()
-        private var rearmWorkItem: DispatchWorkItem?
+        private weak var cameraContentViewController: UIViewController?
+        private weak var guideView: BodyCameraGuideView?
+        private var isWaitingForRetake = false
 
         init(parent: CameraPicker) {
             self.parent = parent
@@ -55,33 +57,37 @@ struct CameraPicker: UIViewControllerRepresentable {
         }
 
         fileprivate func startVoiceShutter(for picker: UIImagePickerController, guideView: BodyCameraGuideView) {
+            self.guideView = guideView
+            cameraContentViewController = cameraContentViewController ?? picker.topViewController
             voiceShutter.start(
                 statusChanged: { status in guideView.setVoiceStatus(status) },
                 capture: { [weak picker, weak guideView] in
                     guideView?.setVoiceStatus("已识别“拍照”，正在拍摄…")
+                    self.isWaitingForRetake = true
                     picker?.takePicture()
-                    self.scheduleVoiceShutterRearm(for: picker, guideView: guideView)
                 }
             )
         }
 
-        private func scheduleVoiceShutterRearm(
-            for picker: UIImagePickerController?,
-            guideView: BodyCameraGuideView?
+        func navigationController(
+            _ navigationController: UINavigationController,
+            willShow viewController: UIViewController,
+            animated: Bool
         ) {
-            rearmWorkItem?.cancel()
-            let workItem = DispatchWorkItem { [weak self, weak picker, weak guideView] in
-                guard let self, let picker, let guideView else { return }
-                guideView.setVoiceStatus("如需重拍，说“拍照”或“茄子”即可再次拍摄")
-                self.startVoiceShutter(for: picker, guideView: guideView)
-            }
-            rearmWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
+            guard
+                isWaitingForRetake,
+                viewController === cameraContentViewController,
+                let picker = navigationController as? UIImagePickerController,
+                let guideView
+            else { return }
+
+            isWaitingForRetake = false
+            guideView.setVoiceStatus("已返回拍摄画面，正在恢复语音快门…")
+            startVoiceShutter(for: picker, guideView: guideView)
         }
 
         private func stopVoiceShutter() {
-            rearmWorkItem?.cancel()
-            rearmWorkItem = nil
+            isWaitingForRetake = false
             voiceShutter.stop()
         }
     }
