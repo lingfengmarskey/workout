@@ -31,5 +31,7 @@ struct RootView: View {
                 Label("设置", systemImage: "gearshape.fill")
             }
         }
+        .scrollDismissesKeyboard(.interactively)
+        .background(KeyboardDismissalView())
     }
 }

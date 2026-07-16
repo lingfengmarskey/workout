@@ -2,6 +2,7 @@
 .DS_Store
 build/
 DerivedData/
+.derivedData/
 xcuserdata/
 *.xcuserstate
 *.hmap

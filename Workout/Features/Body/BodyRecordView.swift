@@ -1,8 +1,17 @@
+import AVFoundation
+import PhotosUI
 import SwiftUI
+import UIKit
 
 struct BodyRecordView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Bindable var record: DailyBodyRecord
     let plan: WeightLossPlan
+
+    @State private var cameraAngle: BodyPhotoAngle?
+    @State private var pendingCameraAngle: BodyPhotoAngle?
+    @State private var previewAngle: BodyPhotoAngle?
+    @State private var errorMessage: String?
 
     var body: some View {
         Form {
@@ -37,11 +46,11 @@ struct BodyRecordView: View {
             }
 
             Section("体型照片") {
-                photoRow(title: "正面", path: record.frontPhotoPath)
-                photoRow(title: "侧面", path: record.sidePhotoPath)
-                photoRow(title: "背面", path: record.backPhotoPath)
+                photoRow(angle: .front)
+                photoRow(angle: .side)
+                photoRow(angle: .back)
 
-                Text("照片选择与本地文件保存将在体型照片功能阶段接入。")
+                Text("照片会压缩后保存在 App 私有目录，不会上传到第三方服务。建议保持相同光线、距离、衣着和站姿。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -62,6 +71,43 @@ struct BodyRecordView: View {
         .onDisappear {
             record.updatedAt = .now
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, pendingCameraAngle != nil else { return }
+            presentPendingCameraAfterActivation()
+        }
+        .fullScreenCover(item: $cameraAngle) { angle in
+            CameraPicker(
+                onImage: { image in
+                    cameraAngle = nil
+                    guard let data = image.jpegData(compressionQuality: 1) else {
+                        errorMessage = BodyPhotoStore.StoreError.encodingFailed.localizedDescription
+                        return
+                    }
+                    do {
+                        try save(data, for: angle)
+                    } catch {
+                        errorMessage = readableMessage(for: error)
+                    }
+                },
+                onCancel: { cameraAngle = nil }
+            )
+            .ignoresSafeArea()
+        }
+        .fullScreenCover(item: $previewAngle) { angle in
+            if let image = BodyPhotoStore.shared.image(for: photoIdentifier(for: angle)) {
+                BodyPhotoPreviewView(image: image, title: "\(angle.title)体型照片")
+            } else {
+                BodyPhotoUnavailablePreviewView()
+            }
+        }
+        .alert("无法处理照片", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "请稍后重试。")
+        }
     }
 
     private func doubleBinding(
@@ -79,13 +125,198 @@ struct BodyRecordView: View {
         )
     }
 
+    private func photoRow(angle: BodyPhotoAngle) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                photoThumbnail(for: angle)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(angle.title).font(.headline)
+                    Text(photoIdentifier(for: angle) == nil ? "未添加" : "已安全保存")
+                        .font(.caption)
+                        .foregroundStyle(photoIdentifier(for: angle) == nil ? Color.secondary : Color.green)
+                }
+                Spacer()
+            }
+
+            HStack {
+                BodyPhotoPickerButton(
+                    title: photoIdentifier(for: angle) == nil ? "从相册选择" : "替换"
+                ) { result in
+                    do {
+                        try save(result.get(), for: angle)
+                    } catch {
+                        errorMessage = readableMessage(for: error)
+                    }
+                }
+
+                Spacer()
+
+                Button {
+                    guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+                        errorMessage = "当前设备没有可用相机。你仍可以从相册选择照片。"
+                        return
+                    }
+                    requestCamera(for: angle)
+                } label: {
+                    Label("拍摄", systemImage: "camera")
+                }
+
+                if photoIdentifier(for: angle) != nil {
+                    Spacer()
+                    Button("删除", role: .destructive) { deletePhoto(for: angle) }
+                }
+            }
+            .font(.subheadline)
+            .buttonStyle(.borderless)
+        }
+    }
+
     @ViewBuilder
-    private func photoRow(title: String, path: String?) -> some View {
-        HStack {
-            Label(title, systemImage: "person.crop.rectangle")
-            Spacer()
-            Text(path == nil ? "未添加" : "已添加")
-                .foregroundStyle(path == nil ? Color.secondary : Color.green)
+    private func photoThumbnail(for angle: BodyPhotoAngle) -> some View {
+        if let image = BodyPhotoStore.shared.image(for: photoIdentifier(for: angle)) {
+            Button {
+                previewAngle = angle
+            } label: {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 72, height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("预览\(angle.title)体型照片")
+            .accessibilityHint("全屏打开照片，可放大和拖动")
+        } else {
+            Image(systemName: "person.crop.rectangle")
+                .font(.title)
+                .foregroundStyle(.secondary)
+                .frame(width: 72, height: 96)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    private func save(_ data: Data, for angle: BodyPhotoAngle) throws {
+        let identifier = try BodyPhotoStore.shared.save(
+            imageData: data,
+            replacing: photoIdentifier(for: angle)
+        )
+        setPhotoIdentifier(identifier, for: angle)
+        record.updatedAt = .now
+    }
+
+    private func deletePhoto(for angle: BodyPhotoAngle) {
+        do {
+            try BodyPhotoStore.shared.delete(identifier: photoIdentifier(for: angle))
+            setPhotoIdentifier(nil, for: angle)
+            record.updatedAt = .now
+        } catch {
+            errorMessage = readableMessage(for: error)
+        }
+    }
+
+    private func requestCamera(for angle: BodyPhotoAngle) {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            presentCamera(for: angle)
+        case .notDetermined:
+            pendingCameraAngle = angle
+            Task {
+                if await AVCaptureDevice.requestAccess(for: .video) {
+                    if scenePhase == .active {
+                        presentPendingCameraAfterActivation()
+                    }
+                } else {
+                    pendingCameraAngle = nil
+                    errorMessage = "未获得相机权限。请在系统“设置”中允许减脂计划访问相机，或改从相册选择。"
+                }
+            }
+        case .denied, .restricted:
+            errorMessage = "相机权限不可用。请在系统“设置”中允许减脂计划访问相机，或改从相册选择。"
+        @unknown default:
+            errorMessage = "目前无法使用相机，请改从相册选择照片。"
+        }
+    }
+
+    private func presentCamera(for angle: BodyPhotoAngle) {
+        guard scenePhase == .active else {
+            pendingCameraAngle = angle
+            return
+        }
+        cameraAngle = angle
+    }
+
+    private func presentPendingCameraAfterActivation() {
+        Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard scenePhase == .active, let angle = pendingCameraAngle else { return }
+            pendingCameraAngle = nil
+            cameraAngle = angle
+        }
+    }
+
+    private func photoIdentifier(for angle: BodyPhotoAngle) -> String? {
+        switch angle {
+        case .front: record.frontPhotoPath
+        case .side: record.sidePhotoPath
+        case .back: record.backPhotoPath
+        }
+    }
+
+    private func setPhotoIdentifier(_ identifier: String?, for angle: BodyPhotoAngle) {
+        switch angle {
+        case .front: record.frontPhotoPath = identifier
+        case .side: record.sidePhotoPath = identifier
+        case .back: record.backPhotoPath = identifier
+        }
+    }
+
+    private func readableMessage(for error: Error) -> String {
+        if let localized = error as? LocalizedError, let description = localized.errorDescription {
+            return description
+        }
+        return "无法访问或保存照片。请检查照片/相机权限，并重试。"
+    }
+}
+
+private struct BodyPhotoPickerButton: View {
+    let title: String
+    let onResult: (Result<Data, Error>) -> Void
+
+    @State private var selectedItem: PhotosPickerItem?
+
+    var body: some View {
+        PhotosPicker(selection: $selectedItem, matching: .images) {
+            Label(title, systemImage: "photo.on.rectangle")
+        }
+        .onChange(of: selectedItem) { _, item in
+            guard let item else { return }
+            Task {
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        throw BodyPhotoStore.StoreError.invalidImage
+                    }
+                    onResult(.success(data))
+                } catch {
+                    onResult(.failure(error))
+                }
+                selectedItem = nil
+            }
+        }
+    }
+}
+
+private enum BodyPhotoAngle: String, Identifiable {
+    case front
+    case side
+    case back
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .front: "正面"
+        case .side: "侧面"
+        case .back: "背面"
         }
     }
 }
