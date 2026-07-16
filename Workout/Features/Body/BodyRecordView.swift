@@ -85,7 +85,7 @@ struct BodyRecordView: View {
             Label(title, systemImage: "person.crop.rectangle")
             Spacer()
             Text(path == nil ? "未添加" : "已添加")
-                .foregroundStyle(path == nil ? .secondary : .green)
+                .foregroundStyle(path == nil ? Color.secondary : Color.green)
         }
     }
 }
