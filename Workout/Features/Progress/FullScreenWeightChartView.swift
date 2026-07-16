@@ -52,6 +52,15 @@ struct FullScreenWeightChartView: View {
             }
             .pickerStyle(.segmented)
 
+            if selectedRecord != nil {
+                Button {
+                    selectedDate = nil
+                } label: {
+                    Label("清除选择", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.bordered)
+            }
+
             if range != .plan {
                 Button { moveWindow(by: -range.dayCount) } label: {
                     Image(systemName: "chevron.left")
@@ -104,13 +113,31 @@ struct FullScreenWeightChartView: View {
             }
         }
         .chartXScale(domain: domain)
-        .chartXSelection(value: $selectedDate)
         .chartLegend(position: .trailing)
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: range == .week ? 7 : 8)) {
                 AxisGridLine().foregroundStyle(.secondary.opacity(0.18))
                 AxisTick()
                 AxisValueLabel(format: range == .plan ? .dateTime.month().day() : .dateTime.weekday(.abbreviated).day())
+            }
+        }
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(.clear)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        SpatialTapGesture()
+                            .onEnded { value in
+                                guard let plotFrame = proxy.plotFrame else { return }
+                                let frame = geometry[plotFrame]
+                                let xPosition = value.location.x - frame.origin.x
+                                guard xPosition >= 0,
+                                      xPosition <= frame.width,
+                                      let date: Date = proxy.value(atX: xPosition) else { return }
+                                selectedDate = date
+                            }
+                    )
             }
         }
         .frame(maxHeight: .infinity)
