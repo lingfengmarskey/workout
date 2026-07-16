@@ -91,6 +91,13 @@ struct BodyRecordView: View {
                         errorMessage = readableMessage(for: error)
                     }
                 },
+                onRetake: {
+                    cameraAngle = nil
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        cameraAngle = angle
+                    }
+                },
                 onCancel: { cameraAngle = nil }
             )
             .ignoresSafeArea()
