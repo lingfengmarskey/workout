@@ -170,7 +170,7 @@ struct TodayView: View {
             Text(title)
             Spacer()
             Text(status.displayName)
-                .foregroundStyle(status == .completed ? .green : .secondary)
+                .foregroundStyle(status == .completed ? Color.green : Color.secondary)
         }
         .font(.subheadline)
     }
@@ -182,7 +182,7 @@ struct TodayView: View {
                     .font(.headline)
                 Spacer()
                 Text(workout.status.displayName)
-                    .foregroundStyle(workout.status == .completed ? .green : .secondary)
+                    .foregroundStyle(workout.status == .completed ? Color.green : Color.secondary)
             }
 
             Text(workout.workoutType)
@@ -219,7 +219,7 @@ struct TodayView: View {
 
     private func statusLabel(_ title: String, _ completed: Bool) -> some View {
         Label(title, systemImage: completed ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(completed ? .green : .secondary)
+            .foregroundStyle(completed ? Color.green : Color.secondary)
     }
 }
 
