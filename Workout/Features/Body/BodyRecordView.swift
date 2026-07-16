@@ -4,12 +4,12 @@ import SwiftUI
 import UIKit
 
 struct BodyRecordView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Bindable var record: DailyBodyRecord
     let plan: WeightLossPlan
 
-    @State private var selectedItem: PhotosPickerItem?
-    @State private var selectedAngle: BodyPhotoAngle?
     @State private var cameraAngle: BodyPhotoAngle?
+    @State private var pendingCameraAngle: BodyPhotoAngle?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -70,20 +70,9 @@ struct BodyRecordView: View {
         .onDisappear {
             record.updatedAt = .now
         }
-        .onChange(of: selectedItem) { _, item in
-            guard let item, let angle = selectedAngle else { return }
-            Task {
-                do {
-                    guard let data = try await item.loadTransferable(type: Data.self) else {
-                        throw BodyPhotoStore.StoreError.invalidImage
-                    }
-                    try save(data, for: angle)
-                } catch {
-                    errorMessage = readableMessage(for: error)
-                }
-                selectedItem = nil
-                selectedAngle = nil
-            }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, pendingCameraAngle != nil else { return }
+            presentPendingCameraAfterActivation()
         }
         .fullScreenCover(item: $cameraAngle) { angle in
             CameraPicker(
@@ -142,10 +131,15 @@ struct BodyRecordView: View {
             }
 
             HStack {
-                PhotosPicker(selection: $selectedItem, matching: .images) {
-                    Label(photoIdentifier(for: angle) == nil ? "从相册选择" : "替换", systemImage: "photo.on.rectangle")
+                BodyPhotoPickerButton(
+                    title: photoIdentifier(for: angle) == nil ? "从相册选择" : "替换"
+                ) { result in
+                    do {
+                        try save(result.get(), for: angle)
+                    } catch {
+                        errorMessage = readableMessage(for: error)
+                    }
                 }
-                .simultaneousGesture(TapGesture().onEnded { selectedAngle = angle })
 
                 Spacer()
 
@@ -165,6 +159,7 @@ struct BodyRecordView: View {
                 }
             }
             .font(.subheadline)
+            .buttonStyle(.borderless)
         }
     }
 
@@ -208,12 +203,16 @@ struct BodyRecordView: View {
     private func requestCamera(for angle: BodyPhotoAngle) {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
-            cameraAngle = angle
+            presentCamera(for: angle)
         case .notDetermined:
+            pendingCameraAngle = angle
             Task {
                 if await AVCaptureDevice.requestAccess(for: .video) {
-                    cameraAngle = angle
+                    if scenePhase == .active {
+                        presentPendingCameraAfterActivation()
+                    }
                 } else {
+                    pendingCameraAngle = nil
                     errorMessage = "未获得相机权限。请在系统“设置”中允许减脂计划访问相机，或改从相册选择。"
                 }
             }
@@ -221,6 +220,23 @@ struct BodyRecordView: View {
             errorMessage = "相机权限不可用。请在系统“设置”中允许减脂计划访问相机，或改从相册选择。"
         @unknown default:
             errorMessage = "目前无法使用相机，请改从相册选择照片。"
+        }
+    }
+
+    private func presentCamera(for angle: BodyPhotoAngle) {
+        guard scenePhase == .active else {
+            pendingCameraAngle = angle
+            return
+        }
+        cameraAngle = angle
+    }
+
+    private func presentPendingCameraAfterActivation() {
+        Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard scenePhase == .active, let angle = pendingCameraAngle else { return }
+            pendingCameraAngle = nil
+            cameraAngle = angle
         }
     }
 
@@ -245,6 +261,33 @@ struct BodyRecordView: View {
             return description
         }
         return "无法访问或保存照片。请检查照片/相机权限，并重试。"
+    }
+}
+
+private struct BodyPhotoPickerButton: View {
+    let title: String
+    let onResult: (Result<Data, Error>) -> Void
+
+    @State private var selectedItem: PhotosPickerItem?
+
+    var body: some View {
+        PhotosPicker(selection: $selectedItem, matching: .images) {
+            Label(title, systemImage: "photo.on.rectangle")
+        }
+        .onChange(of: selectedItem) { _, item in
+            guard let item else { return }
+            Task {
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        throw BodyPhotoStore.StoreError.invalidImage
+                    }
+                    onResult(.success(data))
+                } catch {
+                    onResult(.failure(error))
+                }
+                selectedItem = nil
+            }
+        }
     }
 }
 
