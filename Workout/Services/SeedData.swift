@@ -32,6 +32,7 @@ enum SeedData {
             dailyWaterTarget: 2.3
         )
         try create(plan: plan, in: context)
+        CurrentPlanSelection.select(plan)
     }
 
     static func create(plan: WeightLossPlan, in context: ModelContext) throws {

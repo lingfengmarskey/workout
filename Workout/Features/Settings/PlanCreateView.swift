@@ -4,7 +4,6 @@ import SwiftUI
 struct PlanCreateView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query private var plans: [WeightLossPlan]
 
     @State private var name = "新的 8 周减脂计划"
     @State private var startDate = Calendar.current.startOfDay(for: .now)
@@ -41,7 +40,7 @@ struct PlanCreateView: View {
             }
 
             Section {
-                Text("创建后会自动生成 \(durationWeeks * 7) 天的身体记录、饮食和锻炼计划。已有进行中计划时，请先由你手动暂停、完成或放弃该计划。")
+                Text("创建后会自动生成 \(durationWeeks * 7) 天的身体记录、饮食和锻炼计划。已有进行中的计划不会被自动改变；新计划创建后会设为本机当前使用计划。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -83,11 +82,6 @@ struct PlanCreateView: View {
         guard (1_200...5_000).contains(dailyCalories) else { validationMessage = "每日热量请输入 1200–5000 kcal。"; return }
         guard (40...300).contains(dailyProtein) else { validationMessage = "每日蛋白质请输入 40–300 g。"; return }
         guard (0.5...6).contains(dailyWater) else { validationMessage = "每日饮水请输入 0.5–6 L。"; return }
-        guard !plans.contains(where: { $0.status == .active }) else {
-            validationMessage = "目前还有进行中的计划。请返回设置，由你亲自决定暂停、完成或放弃它，再创建新计划。"
-            return
-        }
-
         isSaving = true
         do {
             let plan = WeightLossPlan(
@@ -102,6 +96,7 @@ struct PlanCreateView: View {
                 dailyWaterTarget: dailyWater
             )
             try SeedData.create(plan: plan, in: modelContext)
+            CurrentPlanSelection.select(plan)
             dismiss()
         } catch {
             modelContext.rollback()

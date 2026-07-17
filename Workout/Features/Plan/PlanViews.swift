@@ -7,9 +7,10 @@ struct PlanOverviewView: View {
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
     @AppStorage("plan.overview.displayMode") private var displayMode: PlanDisplayMode = .month
+    @AppStorage(CurrentPlanSelection.storageKey) private var currentPlanID = ""
 
     private var activePlan: WeightLossPlan? {
-        plans.first(where: { $0.status == .active })
+        CurrentPlanSelection.resolve(from: plans, storedID: currentPlanID)
     }
 
     var body: some View {
@@ -48,9 +49,11 @@ struct PlanOverviewView: View {
                 }
             } else {
                 ContentUnavailableView(
-                    "没有进行中的计划",
+                    plans.contains(where: { $0.status == .active }) ? "请选择当前计划" : "没有进行中的计划",
                     systemImage: "calendar.badge.exclamationmark",
-                    description: Text("请在“设置”中创建新计划，或恢复一个已暂停的计划。")
+                    description: Text(plans.contains(where: { $0.status == .active })
+                        ? "请在“设置”的计划库中选择要使用的进行中计划。"
+                        : "请在“设置”中创建新计划，或恢复一个已暂停的计划。")
                 )
                     .navigationTitle("计划")
             }

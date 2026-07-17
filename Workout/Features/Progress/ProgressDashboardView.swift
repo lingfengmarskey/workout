@@ -14,9 +14,10 @@ struct ProgressDashboardView: View {
     @State private var showWaistChart = false
     @State private var weightDrawingProgress = 0.0
     @State private var waistDrawingProgress = 0.0
+    @AppStorage(CurrentPlanSelection.storageKey) private var currentPlanID = ""
 
     private var activePlan: WeightLossPlan? {
-        plans.first(where: { $0.status == .active })
+        CurrentPlanSelection.resolve(from: plans, storedID: currentPlanID)
     }
 
     private var weightedRecords: [DailyBodyRecord] {
@@ -38,9 +39,11 @@ struct ProgressDashboardView: View {
 
                 if activePlan == nil {
                     ContentUnavailableView(
-                        "没有进行中的计划",
+                        plans.contains(where: { $0.status == .active }) ? "请选择当前计划" : "没有进行中的计划",
                         systemImage: "chart.xyaxis.line",
-                        description: Text("请在“设置”中创建新计划，或从历史计划查看以前的记录。")
+                        description: Text(plans.contains(where: { $0.status == .active })
+                            ? "请在“设置”的计划库中选择要使用的进行中计划。"
+                            : "请在“设置”中创建新计划，或从历史计划查看以前的记录。")
                     )
                     .padding(.top, 30)
                 } else if weightedRecords.isEmpty {
@@ -103,7 +106,10 @@ struct ProgressDashboardView: View {
                 }
             }
         } else {
-            ContentUnavailableView("没有进行中的计划", systemImage: "chart.xyaxis.line")
+            ContentUnavailableView(
+                plans.contains(where: { $0.status == .active }) ? "请选择当前计划" : "没有进行中的计划",
+                systemImage: "chart.xyaxis.line"
+            )
         }
     }
 

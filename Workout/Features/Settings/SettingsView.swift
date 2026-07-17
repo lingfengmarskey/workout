@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
+    @AppStorage(CurrentPlanSelection.storageKey) private var currentPlanID = ""
 
     @State private var showTestDataConfirmation = false
     @State private var testDataMessage: String?
@@ -15,17 +16,21 @@ struct SettingsView: View {
     @State private var statusErrorMessage: String?
 
     private var activePlan: WeightLossPlan? {
-        plans.first(where: { $0.status == .active })
+        CurrentPlanSelection.resolve(from: plans, storedID: currentPlanID)
+    }
+
+    private var activePlans: [WeightLossPlan] {
+        plans.filter { $0.status == .active }
     }
 
     private var historicalPlans: [WeightLossPlan] {
-        plans.filter { $0.id != activePlan?.id }
+        plans.filter { $0.status != .active }
     }
 
     var body: some View {
         Form {
             if let plan = activePlan {
-                Section("当前计划") {
+                Section("当前使用计划") {
                     LabeledContent("名称", value: plan.name)
                     LabeledContent("开始日期", value: plan.startDate.formatted(date: .abbreviated, time: .omitted))
                     LabeledContent("结束日期", value: plan.endDate.formatted(date: .abbreviated, time: .omitted))
@@ -62,12 +67,40 @@ struct SettingsView: View {
                     }
                 }
             } else {
-                Section("当前计划") {
+                Section("当前使用计划") {
                     ContentUnavailableView(
-                        "没有进行中的计划",
+                        activePlans.isEmpty ? "没有进行中的计划" : "请选择当前计划",
                         systemImage: "flag.checkered",
-                        description: Text("可以创建新计划，或从历史计划恢复一个暂停的计划。")
+                        description: Text(activePlans.isEmpty
+                            ? "可以创建新计划，或从历史计划恢复一个暂停的计划。"
+                            : "请在下面的计划库中选择本机要使用的进行中计划。")
                     )
+                }
+            }
+
+            if !activePlans.isEmpty {
+                Section("进行中的计划") {
+                    ForEach(activePlans) { plan in
+                        Button {
+                            CurrentPlanSelection.select(plan)
+                            currentPlanID = plan.id.uuidString
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(plan.name)
+                                        .foregroundStyle(.primary)
+                                    Text("开始于 \(plan.startDate.formatted(date: .abbreviated, time: .omitted))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if activePlan?.id == plan.id {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
