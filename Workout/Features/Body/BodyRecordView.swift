@@ -96,6 +96,7 @@ struct BodyRecordView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             record.updatedAt = .now
+            record.syncRevision += 1
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, pendingCameraAngle != nil else { return }
@@ -310,14 +311,18 @@ struct BodyRecordView: View {
             replacing: photoIdentifier(for: angle)
         )
         setPhotoIdentifier(identifier, for: angle)
+        setPhotoHash(BodyPhotoStore.shared.contentHash(for: identifier), for: angle)
         record.updatedAt = .now
+        record.syncRevision += 1
     }
 
     private func deletePhoto(for angle: BodyPhotoAngle) {
         do {
             try BodyPhotoStore.shared.delete(identifier: photoIdentifier(for: angle))
             setPhotoIdentifier(nil, for: angle)
+            setPhotoHash(nil, for: angle)
             record.updatedAt = .now
+            record.syncRevision += 1
         } catch {
             errorMessage = readableMessage(for: error)
         }
@@ -376,6 +381,14 @@ struct BodyRecordView: View {
         case .front: record.frontPhotoPath = identifier
         case .side: record.sidePhotoPath = identifier
         case .back: record.backPhotoPath = identifier
+        }
+    }
+
+    private func setPhotoHash(_ hash: String?, for angle: BodyPhotoAngle) {
+        switch angle {
+        case .front: record.frontPhotoHash = hash
+        case .side: record.sidePhotoHash = hash
+        case .back: record.backPhotoHash = hash
         }
     }
 

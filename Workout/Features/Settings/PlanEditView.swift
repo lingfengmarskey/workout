@@ -90,6 +90,7 @@ struct PlanEditView: View {
         plan.dailyProteinTarget = dailyProtein
         plan.dailyWaterTarget = dailyWater
         plan.updatedAt = .now
+        plan.syncRevision += 1
         let today = Calendar.current.startOfDay(for: .now)
         mealPlans.filter { $0.planID == plan.id && $0.date >= today }.forEach {
             $0.plannedCalories = dailyCalories

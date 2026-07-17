@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import SwiftData
 import UIKit
 
@@ -53,6 +54,13 @@ final class BodyPhotoStore {
         return UIImage(data: data)
     }
 
+    func contentHash(for identifier: String?) -> String? {
+        guard let identifier,
+              let url = try? photoURL(for: identifier),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     func delete(identifier: String?) throws {
         guard let identifier else { return }
         let url = try photoURL(for: identifier)
@@ -72,6 +80,7 @@ final class BodyPhotoStore {
     /// Use this entry point whenever a body record is removed so its files cannot be orphaned.
     func delete(record: DailyBodyRecord, from context: ModelContext) throws {
         try deletePhotos(for: record)
+        try SyncDeletionService.stageDeletion(id: record.id, entityType: .bodyRecord, in: context)
         context.delete(record)
         try context.save()
     }

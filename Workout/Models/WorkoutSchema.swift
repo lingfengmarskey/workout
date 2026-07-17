@@ -17,12 +17,29 @@ enum WorkoutSchemaV1: VersionedSchema {
     }
 }
 
+enum WorkoutSchemaV2: VersionedSchema {
+    static var versionIdentifier = Schema.Version(2, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [
+            WorkoutSchemaV2.WeightLossPlan.self,
+            WorkoutSchemaV2.DailyBodyRecord.self,
+            WorkoutSchemaV2.DailyMealPlan.self,
+            WorkoutSchemaV2.DailyWorkoutPlan.self,
+            WorkoutSchemaV2.SyncTombstone.self,
+            WorkoutSchemaV2.CloudSyncState.self
+        ]
+    }
+}
+
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [WorkoutSchemaV1.self]
+        [WorkoutSchemaV1.self, WorkoutSchemaV2.self]
     }
 
     static var stages: [MigrationStage] {
-        []
+        [
+            .lightweight(fromVersion: WorkoutSchemaV1.self, toVersion: WorkoutSchemaV2.self)
+        ]
     }
 }

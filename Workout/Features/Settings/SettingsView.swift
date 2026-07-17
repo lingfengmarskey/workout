@@ -205,6 +205,7 @@ struct SettingsView: View {
         let completionSummary = status == .completed ? makeCompletionSummary(for: plan) : nil
         plan.status = status
         plan.updatedAt = .now
+        plan.syncRevision += 1
         do {
             try modelContext.save()
             pendingStatus = nil

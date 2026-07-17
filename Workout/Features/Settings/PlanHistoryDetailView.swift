@@ -185,6 +185,7 @@ struct PlanHistoryDetailView: View {
     private func resumePlan() {
         plan.status = .active
         plan.updatedAt = .now
+        plan.syncRevision += 1
         do {
             try modelContext.save()
             feedback = PlanStatusFeedback(status: .active, planName: plan.name)
@@ -204,12 +205,14 @@ struct PlanHistoryDetailView: View {
         let photoIdentifiers = planRecords.flatMap {
             [$0.frontPhotoPath, $0.sidePhotoPath, $0.backPhotoPath].compactMap { $0 }
         }
-        mealPlans.filter { $0.planID == plan.id }.forEach(modelContext.delete)
-        workoutPlans.filter { $0.planID == plan.id }.forEach(modelContext.delete)
-        planRecords.forEach(modelContext.delete)
-        modelContext.delete(plan)
-
         do {
+            try SyncDeletionService.deletePlanGraph(
+                plan: plan,
+                bodyRecords: planRecords,
+                mealPlans: mealPlans.filter { $0.planID == plan.id },
+                workoutPlans: workoutPlans.filter { $0.planID == plan.id },
+                from: modelContext
+            )
             try modelContext.save()
             photoIdentifiers.forEach { try? BodyPhotoStore.shared.delete(identifier: $0) }
             dismiss()

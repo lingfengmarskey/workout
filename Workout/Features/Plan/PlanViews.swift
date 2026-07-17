@@ -188,6 +188,10 @@ struct MealPlanDetailView: View {
         }
         .navigationTitle("饮食计划")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            plan.updatedAt = .now
+            plan.syncRevision += 1
+        }
     }
 
     private func mealSection(
@@ -323,6 +327,10 @@ struct WorkoutPlanDetailView: View {
         }
         .navigationTitle("锻炼计划")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            plan.updatedAt = .now
+            plan.syncRevision += 1
+        }
         .alert("覆盖当前步数？", isPresented: $showOverwriteStepsConfirmation) {
             Button("使用健康步数") {
                 if let importedSteps { plan.actualSteps = importedSteps }
