@@ -1,7 +1,9 @@
 import SwiftUI
+import SwiftData
 import UIKit
 
 struct ReminderSettingsView: View {
+    @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var configurations = ReminderSettingsStore.load()
@@ -11,6 +13,13 @@ struct ReminderSettingsView: View {
     var body: some View {
         Form {
             permissionSection
+            if activePlan == nil {
+                Section {
+                    Label("没有进行中的计划，提醒不会被调度。设置会保存在本机，创建或恢复计划后自动生效。", systemImage: "pause.circle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
             reminderSection(title: "每日提醒", kinds: ReminderKind.allCases.filter { !$0.isWeekly })
             reminderSection(title: "每周提醒", kinds: ReminderKind.allCases.filter(\.isWeekly))
 
@@ -33,6 +42,11 @@ struct ReminderSettingsView: View {
             ReminderSettingsStore.save(newValue)
             Task { await reschedule(newValue) }
         }
+        .onDisappear {
+            // Persist synchronously as a final safeguard when leaving the editor.
+            ReminderSettingsStore.save(configurations)
+            Task { await reschedule(configurations) }
+        }
         .alert("无法更新提醒", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -41,6 +55,10 @@ struct ReminderSettingsView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+    }
+
+    private var activePlan: WeightLossPlan? {
+        plans.first(where: { $0.status == .active })
     }
 
     private var permissionSection: some View {
@@ -103,7 +121,7 @@ struct ReminderSettingsView: View {
 
     private func reschedule(_ configurations: [ReminderConfiguration]) async {
         do {
-            try await LocalReminderService.reschedule(configurations)
+            try await LocalReminderService.reschedule(configurations, hasActivePlan: activePlan != nil)
         } catch {
             errorMessage = error.localizedDescription
         }

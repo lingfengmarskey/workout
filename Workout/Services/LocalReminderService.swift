@@ -32,13 +32,13 @@ enum LocalReminderService {
         try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
     }
 
-    static func reschedule(_ configurations: [ReminderConfiguration]) async throws {
+    static func reschedule(_ configurations: [ReminderConfiguration], hasActivePlan: Bool) async throws {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
         let managedIdentifiers = pending.map(\.identifier).filter { $0.hasPrefix(identifierPrefix) }
         center.removePendingNotificationRequests(withIdentifiers: managedIdentifiers)
 
-        guard await authorizationState() == .allowed else { return }
+        guard hasActivePlan, await authorizationState() == .allowed else { return }
 
         for configuration in configurations where configuration.enabled {
             if configuration.kind.isWeekly {

@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct TodayView: View {
+    @ObservedObject var notificationRouter: NotificationNavigationRouter
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
     @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
@@ -57,6 +58,48 @@ struct TodayView: View {
                 .navigationTitle("今天")
             }
         }
+        .navigationDestination(item: validNotificationDestination) { destination in
+            notificationDestination(destination)
+        }
+    }
+
+    private var validNotificationDestination: Binding<TodayNotificationDestination?> {
+        Binding(
+            get: { activePlan == nil ? nil : notificationRouter.todayDestination },
+            set: { notificationRouter.todayDestination = $0 }
+        )
+    }
+
+    @ViewBuilder
+    private func notificationDestination(_ destination: TodayNotificationDestination) -> some View {
+        if let plan = activePlan {
+            switch destination {
+            case .bodyRecord:
+                if let record = todayBodyRecord(for: plan) {
+                    BodyRecordView(record: record, plan: plan)
+                } else {
+                    missingTodayRecord("今天没有身体记录", systemImage: "scalemass")
+                }
+            case .mealRecord:
+                if let meal = todayMealPlan(for: plan) {
+                    MealPlanDetailView(plan: meal)
+                } else {
+                    missingTodayRecord("今天没有饮食计划", systemImage: "fork.knife")
+                }
+            case .workoutRecord:
+                if let workout = todayWorkoutPlan(for: plan) {
+                    WorkoutPlanDetailView(plan: workout)
+                } else {
+                    missingTodayRecord("今天没有锻炼计划", systemImage: "figure.run")
+                }
+            }
+        } else {
+            missingTodayRecord("没有进行中的计划", systemImage: "pause.circle")
+        }
+    }
+
+    private func missingTodayRecord(_ title: String, systemImage: String) -> some View {
+        ContentUnavailableView(title, systemImage: systemImage)
     }
 
     private var activePlan: WeightLossPlan? {
