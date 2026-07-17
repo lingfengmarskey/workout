@@ -117,14 +117,17 @@ struct SettingsView: View {
                     Label("健康与步数", systemImage: "heart.text.square")
                 }
                 Label("iCloud 同步", systemImage: "icloud")
-                Label("Face ID", systemImage: "faceid")
+                NavigationLink {
+                    AppLockSettingsView()
+                } label: {
+                    Label("隐私锁", systemImage: "faceid")
+                }
                 NavigationLink {
                     DataExportView()
                 } label: {
                     Label("CSV 导出", systemImage: "square.and.arrow.up")
                 }
             }
-            .foregroundStyle(.secondary)
 
             Section("隐私") {
                 Text("当前版本的数据仅使用 SwiftData 保存在本地。体型照片功能接入后，也应默认保存在 App 私有目录，不上传第三方服务器。")
