@@ -88,6 +88,7 @@ struct BodyPhotoComparisonView: View {
     @State private var useAlignment = true
     @State private var alignedImages: [UUID: UIImage] = [:]
     @State private var outlineImages: [UUID: UIImage] = [:]
+    @State private var outlineCompositeImage: UIImage?
     @State private var alignmentMessage: String?
     @State private var isAligning = false
     @State private var comparisonStyle: BodyPhotoComparisonStyle = .sideBySide
@@ -274,17 +275,21 @@ struct BodyPhotoComparisonView: View {
     @ViewBuilder
     private var outlineComparison: some View {
         if records.count == 2,
-           let firstAligned = alignedImages[records[0].id],
-           let firstOutline = outlineImages[records[0].id],
-           let secondOutline = outlineImages[records[1].id] {
+           let composite = outlineCompositeImage {
             VStack(spacing: 12) {
-                ZStack {
-                    comparisonImage(firstAligned).opacity(0.12)
-                    comparisonImage(firstOutline)
-                    comparisonImage(secondOutline)
+                Button {
+                    preview = HistoryPhotoPreview(image: composite, title: "体型轮廓对比 · \(angle.title)")
+                } label: {
+                    Image(uiImage: composite)
+                        .resizable()
+                        .scaledToFit()
+                        .background(Color.black)
                 }
+                .buttonStyle(.plain)
                 .aspectRatio(3 / 4, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel("打开全屏体型轮廓对比")
+                .accessibilityHint("可双指缩放、拖动或双击放大")
 
                 HStack(spacing: 18) {
                     outlineLegend(record: records[0], color: .cyan)
@@ -292,6 +297,10 @@ struct BodyPhotoComparisonView: View {
                 }
 
                 Text("轮廓仅用于观察外形趋势，不代表精确围度或医学测量。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Label("点击轮廓图可全屏查看和缩放", systemImage: "arrow.up.left.and.arrow.down.right")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -320,6 +329,7 @@ struct BodyPhotoComparisonView: View {
     private func loadAlignedImages() async {
         alignedImages = [:]
         outlineImages = [:]
+        outlineCompositeImage = nil
         alignmentMessage = nil
         guard records.count == 2,
               let first = BodyPhotoStore.shared.image(for: angle.identifier(in: records[0])),
@@ -340,6 +350,11 @@ struct BodyPhotoComparisonView: View {
             if let first = outlines.0, let second = outlines.1 {
                 outlineImages[records[0].id] = first
                 outlineImages[records[1].id] = second
+                outlineCompositeImage = BodyPhotoOutlineService.composeComparison(
+                    reference: alignedFirst,
+                    firstOutline: first,
+                    secondOutline: second
+                )
                 alignmentMessage = "已按人体高度、中心和脚底基线对齐展示副本。"
             } else {
                 alignmentMessage = "照片已对齐，但部分人体轮廓生成失败。"

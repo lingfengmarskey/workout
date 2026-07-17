@@ -26,6 +26,27 @@ enum BodyPhotoOutlineService {
         }.value
     }
 
+    static func composeComparison(
+        reference: UIImage,
+        firstOutline: UIImage,
+        secondOutline: UIImage
+    ) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: reference.size, format: format).image { context in
+            UIColor.black.setFill()
+            context.fill(CGRect(origin: .zero, size: reference.size))
+            reference.draw(
+                in: CGRect(origin: .zero, size: reference.size),
+                blendMode: .normal,
+                alpha: 0.12
+            )
+            firstOutline.draw(in: CGRect(origin: .zero, size: reference.size))
+            secondOutline.draw(in: CGRect(origin: .zero, size: reference.size))
+        }
+    }
+
     private static func renderOutline(mask: CIImage, canvasSize: CGSize, color: UIColor) -> UIImage? {
         let canvasRect = CGRect(origin: .zero, size: canvasSize)
         let scaledMask = mask.transformed(by: CGAffineTransform(
