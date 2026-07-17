@@ -15,6 +15,10 @@ struct SettingsView: View {
         plans.first(where: { $0.status == .active }) ?? plans.first
     }
 
+    private var historicalPlans: [WeightLossPlan] {
+        plans.filter { $0.id != activePlan?.id }
+    }
+
     var body: some View {
         Form {
             if let plan = activePlan {
@@ -55,6 +59,29 @@ struct SettingsView: View {
                         PlanCreateView()
                     } label: {
                         Label("创建新计划", systemImage: "plus.circle.fill")
+                    }
+                }
+            }
+
+            if !historicalPlans.isEmpty {
+                Section("历史计划") {
+                    ForEach(historicalPlans) { plan in
+                        NavigationLink {
+                            PlanHistoryDetailView(plan: plan)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(plan.name)
+                                    Spacer()
+                                    Text(plan.status.displayName)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text("\(plan.startDate.formatted(date: .abbreviated, time: .omitted)) – \(plan.endDate.formatted(date: .abbreviated, time: .omitted))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
