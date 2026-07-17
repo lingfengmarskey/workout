@@ -187,12 +187,9 @@ final class CloudSyncEngine {
             _ = try CloudRecordMergeService.apply(changedRecords: remoteRecordsToApply, deletedRecords: [], in: context)
         }
 
-        let targetIDsToDelete = activeTombstones.map {
-            CKRecord.ID(recordName: $0.recordName, zoneID: CloudKitConstants.zoneID)
-        }
         let result = try await CloudKitTransport.shared.modifyRecords(
             saving: recordsToSave,
-            deleting: targetIDsToDelete
+            deleting: []
         )
 
         let conflictResolution = try await resolveSaveConflicts(
@@ -202,18 +199,10 @@ final class CloudSyncEngine {
         )
         if let error = conflictResolution.unhandledError { throw error }
 
-        let deleteFailures = result.deleteErrors.filter { !Self.isUnknownItem($0.value) }
-        if let error = deleteFailures.values.first { throw error }
-
         let savedOrResolvedIDs = Set(result.savedRecords.keys).union(conflictResolution.resolvedRecordIDs)
-        let deletedOrMissingIDs = result.deletedRecordIDs.union(Set(result.deleteErrors.compactMap { id, error in
-            Self.isUnknownItem(error) ? id : nil
-        }))
         for tombstone in activeTombstones {
             let tombstoneID = CloudRecordCodec.record(for: tombstone).recordID
-            let targetID = CKRecord.ID(recordName: tombstone.recordName, zoneID: CloudKitConstants.zoneID)
-            if (savedOrResolvedIDs.contains(tombstoneID) || tombstoneRecordAlreadyExists.contains(tombstoneID)),
-               deletedOrMissingIDs.contains(targetID) {
+            if savedOrResolvedIDs.contains(tombstoneID) || tombstoneRecordAlreadyExists.contains(tombstoneID) {
                 tombstone.isUploaded = true
             }
         }

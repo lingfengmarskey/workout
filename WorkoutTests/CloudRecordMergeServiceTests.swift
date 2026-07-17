@@ -111,6 +111,48 @@ final class CloudRecordMergeServiceTests: XCTestCase {
         ))
     }
 
+    func testRawCloudDeletionCannotDestroyEntityThatBeatItsTombstone() throws {
+        let context = try makeContext()
+        let id = UUID()
+        let plan = makePlan(id: id, name: "较新的记录", updatedAt: Date(timeIntervalSince1970: 300))
+        let tombstone = SyncTombstone(
+            recordName: SyncEntityType.plan.recordName(for: id),
+            entityType: .plan,
+            deletedAt: Date(timeIntervalSince1970: 200),
+            deviceID: "device-z"
+        )
+        context.insert(plan)
+        context.insert(tombstone)
+        try context.save()
+
+        let recordID = CloudRecordCodec.record(for: plan).recordID
+        let summary = try CloudRecordMergeService.apply(
+            changedRecords: [],
+            deletedRecords: [(recordID, CloudRecordType.plan.rawValue)],
+            in: context
+        )
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WeightLossPlan>()).first?.name, "较新的记录")
+        XCTAssertTrue(try context.fetch(FetchDescriptor<SyncTombstone>()).isEmpty)
+        XCTAssertEqual(summary.ignored, 1)
+    }
+
+    func testRawCloudDeletionWithoutTombstoneIsIgnored() throws {
+        let context = try makeContext()
+        let plan = makePlan(id: UUID(), name: "不能无版本删除", updatedAt: Date(timeIntervalSince1970: 100))
+        context.insert(plan)
+        try context.save()
+
+        let summary = try CloudRecordMergeService.apply(
+            changedRecords: [],
+            deletedRecords: [(CloudRecordCodec.record(for: plan).recordID, CloudRecordType.plan.rawValue)],
+            in: context
+        )
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WeightLossPlan>()).count, 1)
+        XCTAssertEqual(summary.ignored, 1)
+    }
+
     private func makeContext() throws -> ModelContext {
         let schema = Schema(versionedSchema: WorkoutSchemaV2.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

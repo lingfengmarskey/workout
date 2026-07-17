@@ -99,13 +99,25 @@ enum CloudRecordMergeService {
 
         for deletion in deletedRecords {
             guard let entityType = SyncEntityType(recordType: deletion.recordType) else { continue }
-            if try delete(
+            guard let tombstone = tombstonesByRecordName[deletion.recordID.recordName] else {
+                // Normal sync uses versioned tombstones. A raw CloudKit delete
+                // has no timestamp and therefore cannot safely beat local data.
+                summary.ignored += 1
+                continue
+            }
+            if try localEntityIsNewer(than: tombstone, in: context) {
+                context.delete(tombstone)
+                tombstonesByRecordName.removeValue(forKey: deletion.recordID.recordName)
+                summary.ignored += 1
+            } else if try delete(
                 recordName: deletion.recordID.recordName,
                 entityType: entityType,
                 in: context,
                 photoIdentifiersToDelete: &photoIdentifiersToDelete
             ) {
                 summary.deleted += 1
+            } else {
+                summary.ignored += 1
             }
         }
 
