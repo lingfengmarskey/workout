@@ -7,11 +7,17 @@ struct BodyRecordView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Bindable var record: DailyBodyRecord
     let plan: WeightLossPlan
+    @AppStorage("healthkit.weight.authorizationRequested") private var healthWeightAuthorizationRequested = false
 
     @State private var cameraAngle: BodyPhotoAngle?
     @State private var pendingCameraAngle: BodyPhotoAngle?
     @State private var previewAngle: BodyPhotoAngle?
     @State private var errorMessage: String?
+    @State private var isSyncingHealthWeight = false
+    @State private var importedHealthWeight: Double?
+    @State private var showOverwriteWeightConfirmation = false
+    @State private var showWriteWeightConfirmation = false
+    @State private var healthWeightMessage: String?
 
     var body: some View {
         Form {
@@ -23,6 +29,26 @@ struct BodyRecordView: View {
 
                 TextField("早晨体重（kg）", text: doubleBinding(\DailyBodyRecord.actualWeight))
                     .keyboardType(.decimalPad)
+
+                HStack {
+                    Button {
+                        Task { await importWeightFromHealth() }
+                    } label: {
+                        Label("从健康读取", systemImage: "arrow.down.heart")
+                    }
+                    Spacer()
+                    Button {
+                        showWriteWeightConfirmation = true
+                    } label: {
+                        Label("保存到健康", systemImage: "arrow.up.heart")
+                    }
+                    .disabled(record.actualWeight == nil)
+                }
+                .disabled(isSyncingHealthWeight || !HealthKitWeightService.isAvailable)
+
+                if isSyncingHealthWeight {
+                    ProgressView("正在同步体重…")
+                }
 
                 TextField("腰围（cm）", text: doubleBinding(\DailyBodyRecord.waist))
                     .keyboardType(.decimalPad)
@@ -117,6 +143,80 @@ struct BodyRecordView: View {
         } message: {
             Text(errorMessage ?? "请稍后重试。")
         }
+        .alert("覆盖当前体重？", isPresented: $showOverwriteWeightConfirmation) {
+            Button("使用健康体重") {
+                if let importedHealthWeight {
+                    record.actualWeight = importedHealthWeight
+                    record.updatedAt = .now
+                }
+                importedHealthWeight = nil
+            }
+            Button("取消", role: .cancel) { importedHealthWeight = nil }
+        } message: {
+            Text("当前记录为 \(formattedWeight(record.actualWeight))，健康 App 中为 \(formattedWeight(importedHealthWeight))。")
+        }
+        .alert("保存体重到健康 App？", isPresented: $showWriteWeightConfirmation) {
+            Button("确认保存") { Task { await writeWeightToHealth() } }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将保存 \(formattedWeight(record.actualWeight))，日期为 \(record.date.formatted(date: .abbreviated, time: .omitted))。重复保存会使用同一同步标识更新记录。")
+        }
+        .alert("健康体重同步", isPresented: Binding(
+            get: { healthWeightMessage != nil },
+            set: { if !$0 { healthWeightMessage = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(healthWeightMessage ?? "")
+        }
+    }
+
+    private func importWeightFromHealth() async {
+        isSyncingHealthWeight = true
+        defer { isSyncingHealthWeight = false }
+        do {
+            try await ensureHealthWeightAuthorization()
+            let weight = try await HealthKitWeightService.latestWeight(on: record.date)
+            if let current = record.actualWeight, abs(current - weight) >= 0.05 {
+                importedHealthWeight = weight
+                showOverwriteWeightConfirmation = true
+            } else {
+                record.actualWeight = weight
+                record.updatedAt = .now
+            }
+        } catch {
+            healthWeightMessage = error.localizedDescription
+        }
+    }
+
+    private func writeWeightToHealth() async {
+        guard let weight = record.actualWeight else { return }
+        isSyncingHealthWeight = true
+        defer { isSyncingHealthWeight = false }
+        do {
+            try await ensureHealthWeightAuthorization()
+            record.updatedAt = .now
+            try await HealthKitWeightService.saveWeight(
+                weight,
+                on: record.date,
+                recordID: record.id,
+                syncVersion: Int(record.updatedAt.timeIntervalSince1970)
+            )
+            healthWeightMessage = "已保存到健康 App。"
+        } catch {
+            healthWeightMessage = error.localizedDescription
+        }
+    }
+
+    private func ensureHealthWeightAuthorization() async throws {
+        guard !healthWeightAuthorizationRequested else { return }
+        try await HealthKitWeightService.requestAuthorization()
+        healthWeightAuthorizationRequested = true
+    }
+
+    private func formattedWeight(_ value: Double?) -> String {
+        guard let value else { return "未填写" }
+        return "\(value.formatted(.number.precision(.fractionLength(1)))) kg"
     }
 
     private func doubleBinding(
