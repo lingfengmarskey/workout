@@ -189,9 +189,9 @@ enum CloudRecordMergeService {
         model.waist = payload.waist
         model.sleepHours = payload.sleepHours
         model.morningEnergy = payload.morningEnergy
-        model.frontPhotoHash = payload.frontPhotoHash
-        model.sidePhotoHash = payload.sidePhotoHash
-        model.backPhotoHash = payload.backPhotoHash
+        // Photo hashes and deletion state are merged independently through
+        // versioned WLPhoto records. A body-wide edit (weight, note, sleep)
+        // must never overwrite a newer photo from another device.
         model.note = payload.note
         model.createdAt = payload.createdAt
         model.updatedAt = payload.identity.updatedAt

@@ -63,7 +63,80 @@ final class CloudPhotoSyncServiceTests: XCTestCase {
         XCTAssertEqual(body.frontPhotoPath, "existing.jpg")
     }
 
-    private func makePhotoRecord(bodyID: UUID, angle: CloudPhotoAngle, hash: String, assetURL: URL) -> CKRecord {
+    func testNewerServerPhotoReplacesLosingLocalHashAndPath() throws {
+        let context = try makeContext()
+        let body = DailyBodyRecord(planID: UUID(), date: .now)
+        body.frontPhotoHash = "old-hash"
+        body.frontPhotoPath = "old.jpg"
+        context.insert(body)
+        context.insert(PhotoSyncMetadata(
+            bodyID: body.id,
+            angle: .front,
+            contentHash: "old-hash",
+            updatedAt: Date(timeIntervalSince1970: 100),
+            deviceID: "device-a",
+            isDeleted: false
+        ))
+        try context.save()
+
+        let data = try XCTUnwrap(UIImage(systemName: "person.crop.circle.fill")?.pngData())
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let assetURL = FileManager.default.temporaryDirectory.appendingPathComponent("cloud-photo-\(UUID().uuidString).png")
+        try data.write(to: assetURL)
+        defer { try? FileManager.default.removeItem(at: assetURL) }
+
+        try CloudPhotoSyncService.applyDownloadedRecords([
+            makePhotoRecord(bodyID: body.id, angle: .front, hash: hash, assetURL: assetURL, updatedAt: Date(timeIntervalSince1970: 200))
+        ], in: context)
+
+        let installed = try XCTUnwrap(body.frontPhotoPath)
+        defer { try? BodyPhotoStore.shared.delete(identifier: installed) }
+        XCTAssertEqual(body.frontPhotoHash, hash)
+        XCTAssertEqual(BodyPhotoStore.shared.contentHash(for: installed), hash)
+    }
+
+    func testNewerServerDeletionClearsPathHashAndProtectedFile() throws {
+        let context = try makeContext()
+        let data = try XCTUnwrap(UIImage(systemName: "person.fill")?.pngData())
+        let identifier = try BodyPhotoStore.shared.save(imageData: data)
+        let hash = try XCTUnwrap(BodyPhotoStore.shared.contentHash(for: identifier))
+        let body = DailyBodyRecord(planID: UUID(), date: .now)
+        body.frontPhotoPath = identifier
+        body.frontPhotoHash = hash
+        context.insert(body)
+        context.insert(PhotoSyncMetadata(
+            bodyID: body.id,
+            angle: .front,
+            contentHash: hash,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            deviceID: "device-a",
+            isDeleted: false
+        ))
+        try context.save()
+
+        let deletion = makePhotoRecord(
+            bodyID: body.id,
+            angle: .front,
+            hash: nil,
+            assetURL: nil,
+            updatedAt: Date(timeIntervalSince1970: 200),
+            isDeleted: true
+        )
+        try CloudPhotoSyncService.applyDownloadedRecords([deletion], in: context)
+
+        XCTAssertNil(body.frontPhotoPath)
+        XCTAssertNil(body.frontPhotoHash)
+        XCTAssertNil(BodyPhotoStore.shared.contentHash(for: identifier))
+    }
+
+    private func makePhotoRecord(
+        bodyID: UUID,
+        angle: CloudPhotoAngle,
+        hash: String?,
+        assetURL: URL?,
+        updatedAt: Date = .now,
+        isDeleted: Bool = false
+    ) -> CKRecord {
         let id = CKRecord.ID(
             recordName: CloudPhotoSyncService.recordName(bodyID: bodyID, angle: angle),
             zoneID: CloudKitConstants.zoneID
@@ -71,15 +144,16 @@ final class CloudPhotoSyncServiceTests: XCTestCase {
         let record = CKRecord(recordType: CloudRecordType.photo.rawValue, recordID: id)
         record["bodyID"] = bodyID.uuidString.lowercased() as CKRecordValue
         record["angle"] = angle.rawValue as CKRecordValue
-        record["contentHash"] = hash as CKRecordValue
-        record["updatedAt"] = Date.now as CKRecordValue
+        record["contentHash"] = hash as CKRecordValue?
+        record["updatedAt"] = updatedAt as CKRecordValue
         record["deviceID"] = "test-device" as CKRecordValue
-        record["asset"] = CKAsset(fileURL: assetURL)
+        record["isDeleted"] = NSNumber(value: isDeleted)
+        if let assetURL { record["asset"] = CKAsset(fileURL: assetURL) }
         return record
     }
 
     private func makeContext() throws -> ModelContext {
-        let schema = Schema(versionedSchema: WorkoutSchemaV2.self)
+        let schema = Schema(versionedSchema: WorkoutSchemaV3.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         return try ModelContext(ModelContainer(for: schema, configurations: [configuration]))
     }
