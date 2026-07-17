@@ -92,7 +92,9 @@ enum CloudPhotoSyncService {
                 let hash = expectedHash(for: angle, body: body)
                 guard hash != nil || metadata.contains(where: { $0.id == id }) else { continue }
                 _ = metadata.first(where: { $0.id == id }) ?? {
-                    let created = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: body.updatedAt, isDeleted: hash == nil)
+                    // V2 had no per-angle clock. Treat migrated content as an
+                    // unversioned baseline so any real WLPhoto version wins.
+                    let created = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: .distantPast, isDeleted: hash == nil)
                     context.insert(created); metadata.append(created); return created
                 }()
             }
@@ -190,10 +192,9 @@ enum CloudPhotoSyncService {
 
     private static func inferredMetadata(body: DailyBodyRecord, angle: CloudPhotoAngle, context: ModelContext) -> PhotoSyncMetadata {
         let hash = expectedHash(for: angle, body: body)
-        // With no local photo there is no local deletion intent to compete
-        // with an authoritative WLPhoto arriving during first sync.
-        let inferredDate = hash == nil ? Date.distantPast : body.updatedAt
-        let item = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: inferredDate, isDeleted: hash == nil)
+        // Missing metadata means this is migrated V2 content with no reliable
+        // photo clock. Never borrow the body-wide timestamp.
+        let item = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: .distantPast, isDeleted: hash == nil)
         context.insert(item)
         return item
     }

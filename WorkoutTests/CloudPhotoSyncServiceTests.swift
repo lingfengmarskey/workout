@@ -95,6 +95,34 @@ final class CloudPhotoSyncServiceTests: XCTestCase {
         XCTAssertEqual(BodyPhotoStore.shared.contentHash(for: installed), hash)
     }
 
+    func testMigratedVersionlessPhotoCannotBorrowNewerBodyClock() throws {
+        let context = try makeContext()
+        let body = DailyBodyRecord(planID: UUID(), date: .now)
+        body.frontPhotoHash = "stale-v2-hash"
+        body.frontPhotoPath = "stale-v2.jpg"
+        body.updatedAt = Date(timeIntervalSince1970: 300) // unrelated weight/note edit
+        context.insert(body)
+        try context.save()
+
+        let data = try XCTUnwrap(UIImage(systemName: "person.crop.square.fill")?.pngData())
+        let cloudHash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let assetURL = FileManager.default.temporaryDirectory.appendingPathComponent("cloud-photo-\(UUID().uuidString).png")
+        try data.write(to: assetURL)
+        defer { try? FileManager.default.removeItem(at: assetURL) }
+
+        try CloudPhotoSyncService.applyDownloadedRecords([
+            makePhotoRecord(
+                bodyID: body.id, angle: .front, hash: cloudHash,
+                assetURL: assetURL, updatedAt: Date(timeIntervalSince1970: 200)
+            )
+        ], in: context)
+
+        let installed = try XCTUnwrap(body.frontPhotoPath)
+        defer { try? BodyPhotoStore.shared.delete(identifier: installed) }
+        XCTAssertEqual(body.frontPhotoHash, cloudHash)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<PhotoSyncMetadata>()).first?.updatedAt, Date(timeIntervalSince1970: 200))
+    }
+
     func testNewerServerDeletionClearsPathHashAndProtectedFile() throws {
         let context = try makeContext()
         let data = try XCTUnwrap(UIImage(systemName: "person.fill")?.pngData())
