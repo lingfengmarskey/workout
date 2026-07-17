@@ -289,7 +289,13 @@ enum SyncEntityType: String, Codable, CaseIterable {
     case workoutPlan
 
     func recordName(for id: UUID) -> String {
-        "\(rawValue)-\(id.uuidString.lowercased())"
+        let prefix = switch self {
+        case .plan: "wlplan"
+        case .bodyRecord: "wlbody"
+        case .mealPlan: "wlmeal"
+        case .workoutPlan: "wlworkout"
+        }
+        return "\(prefix)-\(id.uuidString.lowercased())"
     }
 }
 
