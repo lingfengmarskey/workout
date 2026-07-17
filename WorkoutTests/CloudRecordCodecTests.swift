@@ -43,6 +43,38 @@ final class CloudRecordCodecTests: XCTestCase {
         XCTAssertEqual(record["frontPhotoHash"] as? String, "abc123")
     }
 
+    func testMealRecordUploadsActualFoodEntrySnapshot() throws {
+        let meal = DailyMealPlan(
+            planID: UUID(),
+            date: .now,
+            breakfast: "早餐",
+            lunch: "午餐",
+            dinner: "晚餐",
+            snack: "加餐",
+            plannedCalories: 1_900,
+            plannedProtein: 140,
+            waterTarget: 2.2
+        )
+        let entry = ActualFoodEntry(
+            mealSlot: .lunch,
+            foodName: "熟米饭",
+            amount: 200,
+            unit: "g",
+            nutritionBasisAmount: 100,
+            caloriesPerBasis: 116
+        )
+        meal.actualFoodEntries = [entry]
+
+        let record = CloudRecordCodec.record(for: meal)
+        let payload = try CloudRecordPayload.decode(record)
+
+        guard case let .meal(decoded) = payload else {
+            return XCTFail("Expected a meal payload")
+        }
+        XCTAssertEqual(decoded.actualFoodEntriesJSON, meal.actualFoodEntriesJSON)
+        XCTAssertEqual(decoded.actualFoodEntriesJSON, record["actualFoodEntriesJSON"] as? String)
+    }
+
     func testTombstoneRecordNameIsStable() {
         let tombstone = SyncTombstone(recordName: "bodyrecord-deadbeef", entityType: .bodyRecord)
         let first = CloudRecordCodec.record(for: tombstone)

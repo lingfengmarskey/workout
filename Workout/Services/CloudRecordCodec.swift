@@ -63,6 +63,7 @@ enum CloudRecordCodec {
         set(record, "hungerLevel", meal.hungerLevel)
         set(record, "actualWater", meal.actualWater)
         set(record, "note", meal.note)
+        set(record, "actualFoodEntriesJSON", meal.actualFoodEntriesJSON)
         return record
     }
 

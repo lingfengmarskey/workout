@@ -240,6 +240,7 @@ enum CloudRecordMergeService {
         model.hungerLevel = payload.hungerLevel
         model.actualWater = payload.actualWater
         model.note = payload.note
+        model.actualFoodEntriesJSON = payload.actualFoodEntriesJSON
         model.updatedAt = payload.identity.updatedAt
         model.syncRevision = payload.identity.syncRevision
     }

@@ -78,6 +78,47 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
         XCTAssertEqual(metadata.contentHash, "front-hash")
     }
 
+    func testMigratesV4MealPlanToV5WithAnEmptyActualFoodSnapshot() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("workout-v5-meal-migration-\(UUID().uuidString).store")
+        defer { removeStoreFiles(at: storeURL) }
+
+        let planID = UUID()
+        let mealID = UUID()
+        try autoreleasepool {
+            let schema = Schema(versionedSchema: WorkoutSchemaV4.self)
+            let configuration = ModelConfiguration("V5MealMigrationTest", schema: schema, url: storeURL)
+            let context = ModelContext(try ModelContainer(for: schema, configurations: [configuration]))
+            context.insert(WorkoutSchemaV4.DailyMealPlan(
+                id: mealID,
+                planID: planID,
+                date: .now,
+                breakfast: "早餐",
+                lunch: "午餐",
+                dinner: "晚餐",
+                snack: "加餐",
+                plannedCalories: 1_900,
+                plannedProtein: 140,
+                waterTarget: 2.2
+            ))
+            try context.save()
+        }
+
+        let schema = Schema(versionedSchema: WorkoutSchemaV5.self)
+        let configuration = ModelConfiguration("V5MealMigrationTest", schema: schema, url: storeURL)
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: [configuration]
+        )
+        let context = ModelContext(container)
+        let meal = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutSchemaV5.DailyMealPlan>()).first)
+
+        XCTAssertEqual(meal.id, mealID)
+        XCTAssertTrue(meal.actualFoodEntries.isEmpty)
+        XCTAssertEqual(meal.actualFoodEntriesJSON, "[]")
+    }
+
     func testMigratesV1StoreToV2WithoutLosingExistingRecords() throws {
         let storeURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("workout-migration-\(UUID().uuidString).store")

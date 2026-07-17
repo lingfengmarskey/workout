@@ -41,6 +41,87 @@ enum CompletionStatus: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum MealSlot: String, Codable, CaseIterable, Identifiable {
+    case breakfast
+    case lunch
+    case dinner
+    case snack
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .breakfast: "早餐"
+        case .lunch: "午餐"
+        case .dinner: "晚餐"
+        case .snack: "加餐"
+        }
+    }
+}
+
+enum FoodDataSource: String, Codable {
+    case manual
+    case planned
+    case photoEstimate
+    case database
+}
+
+struct ActualFoodEntry: Codable, Equatable, Identifiable {
+    var id: UUID
+    var mealSlot: MealSlot
+    var foodName: String
+    var amount: Double
+    var unit: String
+    var nutritionBasisAmount: Double
+    var caloriesPerBasis: Double
+    var proteinPerBasis: Double?
+    var carbohydratesPerBasis: Double?
+    var fatPerBasis: Double?
+    var dataSource: FoodDataSource
+    var confidence: Double?
+    var isConfirmed: Bool
+
+    init(
+        id: UUID = UUID(),
+        mealSlot: MealSlot,
+        foodName: String,
+        amount: Double,
+        unit: String,
+        nutritionBasisAmount: Double,
+        caloriesPerBasis: Double,
+        proteinPerBasis: Double? = nil,
+        carbohydratesPerBasis: Double? = nil,
+        fatPerBasis: Double? = nil,
+        dataSource: FoodDataSource = .manual,
+        confidence: Double? = nil,
+        isConfirmed: Bool = true
+    ) {
+        self.id = id
+        self.mealSlot = mealSlot
+        self.foodName = foodName
+        self.amount = amount
+        self.unit = unit
+        self.nutritionBasisAmount = nutritionBasisAmount
+        self.caloriesPerBasis = caloriesPerBasis
+        self.proteinPerBasis = proteinPerBasis
+        self.carbohydratesPerBasis = carbohydratesPerBasis
+        self.fatPerBasis = fatPerBasis
+        self.dataSource = dataSource
+        self.confidence = confidence
+        self.isConfirmed = isConfirmed
+    }
+
+    var multiplier: Double {
+        guard nutritionBasisAmount > 0 else { return 0 }
+        return amount / nutritionBasisAmount
+    }
+
+    var calories: Double { max(0, caloriesPerBasis * multiplier) }
+    var protein: Double? { proteinPerBasis.map { max(0, $0 * multiplier) } }
+    var carbohydrates: Double? { carbohydratesPerBasis.map { max(0, $0 * multiplier) } }
+    var fat: Double? { fatPerBasis.map { max(0, $0 * multiplier) } }
+}
+
 extension WorkoutSchemaV1 {
 @Model
 final class WeightLossPlan {
@@ -268,10 +349,10 @@ final class DailyWorkoutPlan {
 }
 
 // Keep feature code independent of the active schema namespace. The current
-// store is V4; older namespaces remain available only to migration code.
+// store is V5; older namespaces remain available only to migration code.
 typealias WeightLossPlan = WorkoutSchemaV4.WeightLossPlan
 typealias DailyBodyRecord = WorkoutSchemaV4.DailyBodyRecord
-typealias DailyMealPlan = WorkoutSchemaV4.DailyMealPlan
+typealias DailyMealPlan = WorkoutSchemaV5.DailyMealPlan
 typealias DailyWorkoutPlan = WorkoutSchemaV4.DailyWorkoutPlan
 typealias SyncTombstone = WorkoutSchemaV4.SyncTombstone
 typealias CloudSyncState = WorkoutSchemaV4.CloudSyncState
