@@ -90,7 +90,7 @@
 
 ## Phase 6：P1 能力
 
-- [ ] 本地通知
+- [x] 本地通知
 - [ ] HealthKit 步数读取
 - [ ] HealthKit 体重读取和写入
 - [ ] CSV 导出
