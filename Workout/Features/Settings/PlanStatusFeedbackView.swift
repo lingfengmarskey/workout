@@ -4,6 +4,15 @@ struct PlanStatusFeedback: Identifiable {
     let id = UUID()
     let status: PlanStatus
     let planName: String
+    var completionSummary: PlanCompletionSummary? = nil
+}
+
+struct PlanCompletionSummary {
+    let executedDays: Int
+    let startWeight: Double
+    let latestWeight: Double?
+    let mealCompletionRate: Double?
+    let workoutCompletionRate: Double?
 }
 
 struct PlanStatusFeedbackView: View {
@@ -28,6 +37,7 @@ struct PlanStatusFeedbackView: View {
                 }
             }
 
+            ScrollView {
             VStack(spacing: 24) {
                 Image(systemName: icon)
                     .font(.system(size: 88, weight: .semibold))
@@ -42,17 +52,64 @@ struct PlanStatusFeedbackView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if let summary = feedback.completionSummary, feedback.status == .completed {
+                    completionSummary(summary)
+                }
+
                 Button("完成", action: dismiss)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
             }
             .padding(32)
+            }
         }
         .onAppear {
             withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.7, dampingFraction: 0.68)) {
                 isVisible = true
             }
         }
+    }
+
+    private func completionSummary(_ summary: PlanCompletionSummary) -> some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 12) {
+                achievementMetric("执行天数", "\(summary.executedDays) 天")
+                achievementMetric("起始体重", weight(summary.startWeight))
+            }
+            HStack(spacing: 12) {
+                if let latest = summary.latestWeight {
+                    achievementMetric("最后体重", weight(latest))
+                    achievementMetric("累计变化", signedWeight(latest - summary.startWeight))
+                }
+            }
+            HStack(spacing: 12) {
+                if let rate = summary.mealCompletionRate {
+                    achievementMetric("饮食执行率", rate.formatted(.percent.precision(.fractionLength(0))))
+                }
+                if let rate = summary.workoutCompletionRate {
+                    achievementMetric("锻炼执行率", rate.formatted(.percent.precision(.fractionLength(0))))
+                }
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func achievementMetric(_ title: String, _ value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.title3.bold()).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func weight(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(1)))) kg"
+    }
+
+    private func signedWeight(_ value: Double) -> String {
+        let prefix = value > 0 ? "+" : ""
+        return "\(prefix)\(value.formatted(.number.precision(.fractionLength(1)))) kg"
     }
 
     private var title: String {
