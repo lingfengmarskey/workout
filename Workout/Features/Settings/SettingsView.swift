@@ -118,7 +118,11 @@ struct SettingsView: View {
                 }
                 Label("iCloud 同步", systemImage: "icloud")
                 Label("Face ID", systemImage: "faceid")
-                Label("CSV 导出", systemImage: "square.and.arrow.up")
+                NavigationLink {
+                    DataExportView()
+                } label: {
+                    Label("CSV 导出", systemImage: "square.and.arrow.up")
+                }
             }
             .foregroundStyle(.secondary)
 

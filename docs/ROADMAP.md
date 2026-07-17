@@ -93,7 +93,7 @@
 - [x] 本地通知
 - [x] HealthKit 步数读取
 - [x] HealthKit 体重读取和写入
-- [ ] CSV 导出
+- [x] CSV 导出
 - [ ] Face ID
 - [ ] iCloud / CloudKit 同步
 - [ ] Widget
