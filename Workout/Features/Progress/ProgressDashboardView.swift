@@ -9,6 +9,11 @@ struct ProgressDashboardView: View {
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
     @State private var showFullScreenWeightChart = false
     @State private var showFullScreenWaistChart = false
+    @State private var hasScheduledChartLoading = false
+    @State private var showWeightChart = false
+    @State private var showWaistChart = false
+    @State private var weightChartReveal: CGFloat = 0
+    @State private var waistChartReveal: CGFloat = 0
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -53,6 +58,7 @@ struct ProgressDashboardView: View {
                 FullScreenWaistChartView(plan: plan, records: waistRecords)
             }
         }
+        .task { await loadChartsAfterFirstFrame() }
     }
 
     private func photoHistoryCard(plan: WeightLossPlan) -> some View {
@@ -152,7 +158,8 @@ struct ProgressDashboardView: View {
                     .foregroundStyle(.tint)
             }
 
-            Chart {
+            if showWeightChart {
+                Chart {
                 ForEach(0..<plan.durationDays, id: \.self) { day in
                     if let date = Calendar.current.date(byAdding: .day, value: day, to: plan.startDate) {
                         LineMark(
@@ -190,15 +197,24 @@ struct ProgressDashboardView: View {
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
                     .interpolationMethod(.catmullRom)
                 }
+                }
+                .chartLegend(position: .bottom)
+                .frame(height: 280)
+                .mask(alignment: .leading) {
+                    GeometryReader { geometry in
+                        Rectangle().frame(width: geometry.size.width * weightChartReveal)
+                    }
+                }
+                .transition(.opacity)
+            } else {
+                chartLoadingPlaceholder(title: "准备体重趋势…", height: 280)
             }
-            .chartLegend(position: .bottom)
-            .frame(height: 280)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         .contentShape(Rectangle())
-        .onTapGesture { showFullScreenWeightChart = true }
+        .onTapGesture { if showWeightChart { showFullScreenWeightChart = true } }
     }
 
     private var waistChart: some View {
@@ -210,21 +226,62 @@ struct ProgressDashboardView: View {
                     .font(.subheadline)
                     .foregroundStyle(.tint)
             }
-            Chart(waistRecords) { record in
-                if let waist = record.waist {
-                    LineMark(x: .value("日期", record.date), y: .value("腰围", waist))
-                        .lineStyle(StrokeStyle(lineWidth: 1))
-                    PointMark(x: .value("日期", record.date), y: .value("腰围", waist))
-                        .symbolSize(18)
+            if showWaistChart {
+                Chart(waistRecords) { record in
+                    if let waist = record.waist {
+                        LineMark(x: .value("日期", record.date), y: .value("腰围", waist))
+                            .lineStyle(StrokeStyle(lineWidth: 1))
+                        PointMark(x: .value("日期", record.date), y: .value("腰围", waist))
+                            .symbolSize(18)
+                    }
                 }
+                .frame(height: 200)
+                .mask(alignment: .leading) {
+                    GeometryReader { geometry in
+                        Rectangle().frame(width: geometry.size.width * waistChartReveal)
+                    }
+                }
+                .transition(.opacity)
+            } else {
+                chartLoadingPlaceholder(title: "准备腰围趋势…", height: 200)
             }
-            .frame(height: 200)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         .contentShape(Rectangle())
-        .onTapGesture { showFullScreenWaistChart = true }
+        .onTapGesture { if showWaistChart { showFullScreenWaistChart = true } }
+    }
+
+    private func chartLoadingPlaceholder(title: String, height: CGFloat) -> some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text(title)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+    }
+
+    @MainActor
+    private func loadChartsAfterFirstFrame() async {
+        guard !hasScheduledChartLoading else { return }
+        hasScheduledChartLoading = true
+
+        try? await Task.sleep(for: .milliseconds(120))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.2)) { showWeightChart = true }
+        await Task.yield()
+        withAnimation(.easeInOut(duration: 0.75)) { weightChartReveal = 1 }
+
+        try? await Task.sleep(for: .milliseconds(220))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.2)) { showWaistChart = true }
+        await Task.yield()
+        withAnimation(.easeInOut(duration: 0.65)) { waistChartReveal = 1 }
     }
 
     private var waistRecords: [DailyBodyRecord] {
