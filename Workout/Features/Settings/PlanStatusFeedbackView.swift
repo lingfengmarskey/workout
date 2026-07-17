@@ -143,7 +143,7 @@ struct PlanStatusFeedbackView: View {
     private var colors: [Color] {
         switch feedback.status {
         case .active: [.green.opacity(0.35), .mint.opacity(0.2), Color(uiColor: .systemBackground)]
-        case .completed: [Color(red: 0.03, green: 0.05, blue: 0.16), Color(red: 0.15, green: 0.06, blue: 0.28)]
+        case .completed: [Color(red: 0.005, green: 0.008, blue: 0.018), Color(red: 0.018, green: 0.025, blue: 0.055)]
         case .paused: [.blue.opacity(0.28), Color(uiColor: .systemBackground)]
         case .abandoned: [.gray.opacity(0.4), .blue.opacity(0.15), Color(uiColor: .systemBackground)]
         default: [.green.opacity(0.25), Color(uiColor: .systemBackground)]
