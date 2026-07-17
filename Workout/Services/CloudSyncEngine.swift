@@ -90,6 +90,11 @@ final class CloudSyncEngine {
         try context.save()
     }
 
+    func deleteCloudDataKeepingLocal(in context: ModelContext) async throws {
+        try await CloudKitInfrastructureService.shared.deletePrivateZone()
+        try stopThisDevice(in: context)
+    }
+
     func syncState(in context: ModelContext) throws -> CloudSyncState {
         if let existing = try context.fetch(FetchDescriptor<CloudSyncState>()).first(where: { $0.id == "primary" }) {
             return existing

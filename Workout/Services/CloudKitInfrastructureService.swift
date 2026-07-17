@@ -78,6 +78,17 @@ actor CloudKitInfrastructureService {
         _ = try await save(subscription: subscription)
     }
 
+    func deletePrivateZone() async throws {
+        guard try await accountAvailability() == .available else {
+            throw CloudInfrastructureError.accountUnavailable
+        }
+        do {
+            _ = try await database.deleteRecordZone(withID: CloudKitConstants.zoneID)
+        } catch let error as CKError where error.code == .zoneNotFound || error.code == .unknownItem {
+            // Idempotent: the requested cloud data is already absent.
+        }
+    }
+
     private func save(zone: CKRecordZone) async throws -> CKRecordZone {
         try await withCheckedThrowingContinuation { continuation in
             database.save(zone) { savedZone, error in

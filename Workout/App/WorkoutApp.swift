@@ -77,6 +77,7 @@ private struct BootstrapView: View {
                         authenticationError = nil
                     }
                 case .active:
+                    Task { try? await CloudSyncEngine.shared.synchronize(in: modelContext) }
                     if isAppLockEnabled && !isUnlocked && !isAuthenticating {
                         Task { await authenticate() }
                     }
@@ -95,6 +96,9 @@ private struct BootstrapView: View {
             .onReceive(NotificationCenter.default.publisher(for: AppLockSettings.didAuthenticate)) { _ in
                 isUnlocked = true
                 authenticationError = nil
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .cloudKitRemoteChange)) { _ in
+                Task { try? await CloudSyncEngine.shared.synchronize(in: modelContext) }
             }
             .task(id: activePlanID) {
                 try? await LocalReminderService.reschedule(
