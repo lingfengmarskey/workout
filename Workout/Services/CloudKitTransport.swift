@@ -44,10 +44,10 @@ actor CloudKitTransport {
                 let snapshot = accumulator.snapshot()
                 if let zoneError = snapshot.zoneError {
                     continuation.resume(throwing: zoneError)
-                } else if snapshot.moreComing {
-                    continuation.resume(throwing: CloudKitTransportError.incompleteZoneFetch)
                 } else if let error {
                     continuation.resume(throwing: error)
+                } else if snapshot.moreComing {
+                    continuation.resume(throwing: CloudKitTransportError.incompleteZoneFetch)
                 } else {
                     continuation.resume(returning: CloudZoneChangeBatch(
                         changedRecords: snapshot.changedRecords,
