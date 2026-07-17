@@ -12,8 +12,8 @@ struct ProgressDashboardView: View {
     @State private var hasScheduledChartLoading = false
     @State private var showWeightChart = false
     @State private var showWaistChart = false
-    @State private var weightChartReveal: CGFloat = 0
-    @State private var waistChartReveal: CGFloat = 0
+    @State private var weightDrawingProgress = 0.0
+    @State private var waistDrawingProgress = 0.0
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -31,7 +31,7 @@ struct ProgressDashboardView: View {
 
                 if let plan = activePlan {
                     weightChart(plan: plan)
-                    if !waistRecords.isEmpty { waistChart }
+                    if !waistRecords.isEmpty { waistChart(plan: plan) }
                     if !photoRecords.isEmpty { photoHistoryCard(plan: plan) }
                     weeklyReviews(plan: plan)
                 }
@@ -160,7 +160,7 @@ struct ProgressDashboardView: View {
 
             if showWeightChart {
                 Chart {
-                ForEach(0..<plan.durationDays, id: \.self) { day in
+                ForEach(0..<visibleCount(total: plan.durationDays, progress: weightDrawingProgress), id: \.self) { day in
                     if let date = Calendar.current.date(byAdding: .day, value: day, to: plan.startDate) {
                         LineMark(
                             x: .value("日期", date),
@@ -171,7 +171,7 @@ struct ProgressDashboardView: View {
                     }
                 }
 
-                ForEach(weightedRecords) { record in
+                ForEach(Array(weightedRecords.prefix(visibleCount(total: weightedRecords.count, progress: weightDrawingProgress)))) { record in
                     if let weight = record.actualWeight {
                         LineMark(
                             x: .value("日期", record.date),
@@ -188,7 +188,7 @@ struct ProgressDashboardView: View {
                     }
                 }
 
-                ForEach(sevenDayAveragePoints) { point in
+                ForEach(Array(sevenDayAveragePoints.prefix(visibleCount(total: sevenDayAveragePoints.count, progress: weightDrawingProgress)))) { point in
                     LineMark(
                         x: .value("日期", point.date),
                         y: .value("体重", point.value)
@@ -199,12 +199,9 @@ struct ProgressDashboardView: View {
                 }
                 }
                 .chartLegend(position: .bottom)
+                .chartXScale(domain: plan.startDate...plan.endDate)
+                .chartYScale(domain: weightYDomain(plan: plan))
                 .frame(height: 280)
-                .mask(alignment: .leading) {
-                    GeometryReader { geometry in
-                        Rectangle().frame(width: geometry.size.width * weightChartReveal)
-                    }
-                }
                 .transition(.opacity)
             } else {
                 chartLoadingPlaceholder(title: "准备体重趋势…", height: 280)
@@ -217,7 +214,7 @@ struct ProgressDashboardView: View {
         .onTapGesture { if showWeightChart { showFullScreenWeightChart = true } }
     }
 
-    private var waistChart: some View {
+    private func waistChart(plan: WeightLossPlan) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("腰围趋势").font(.headline)
@@ -227,7 +224,7 @@ struct ProgressDashboardView: View {
                     .foregroundStyle(.tint)
             }
             if showWaistChart {
-                Chart(waistRecords) { record in
+                Chart(Array(waistRecords.prefix(visibleCount(total: waistRecords.count, progress: waistDrawingProgress)))) { record in
                     if let waist = record.waist {
                         LineMark(x: .value("日期", record.date), y: .value("腰围", waist))
                             .lineStyle(StrokeStyle(lineWidth: 1))
@@ -235,12 +232,9 @@ struct ProgressDashboardView: View {
                             .symbolSize(18)
                     }
                 }
+                .chartXScale(domain: plan.startDate...plan.endDate)
+                .chartYScale(domain: waistYDomain)
                 .frame(height: 200)
-                .mask(alignment: .leading) {
-                    GeometryReader { geometry in
-                        Rectangle().frame(width: geometry.size.width * waistChartReveal)
-                    }
-                }
                 .transition(.opacity)
             } else {
                 chartLoadingPlaceholder(title: "准备腰围趋势…", height: 200)
@@ -275,13 +269,46 @@ struct ProgressDashboardView: View {
         guard !Task.isCancelled else { return }
         withAnimation(.easeOut(duration: 0.2)) { showWeightChart = true }
         await Task.yield()
-        withAnimation(.easeInOut(duration: 0.75)) { weightChartReveal = 1 }
+        for step in 1...40 {
+            guard !Task.isCancelled else { return }
+            withAnimation(.linear(duration: 0.035)) {
+                weightDrawingProgress = Double(step) / 40
+            }
+            try? await Task.sleep(for: .milliseconds(22))
+        }
 
-        try? await Task.sleep(for: .milliseconds(220))
+        try? await Task.sleep(for: .milliseconds(140))
         guard !Task.isCancelled else { return }
         withAnimation(.easeOut(duration: 0.2)) { showWaistChart = true }
         await Task.yield()
-        withAnimation(.easeInOut(duration: 0.65)) { waistChartReveal = 1 }
+        for step in 1...32 {
+            guard !Task.isCancelled else { return }
+            withAnimation(.linear(duration: 0.035)) {
+                waistDrawingProgress = Double(step) / 32
+            }
+            try? await Task.sleep(for: .milliseconds(22))
+        }
+    }
+
+    private func visibleCount(total: Int, progress: Double) -> Int {
+        guard total > 0, progress > 0 else { return 0 }
+        return min(total, max(1, Int(ceil(Double(total) * progress))))
+    }
+
+    private func weightYDomain(plan: WeightLossPlan) -> ClosedRange<Double> {
+        let values = [plan.startWeight, plan.phaseTargetWeight]
+            + weightedRecords.compactMap(\.actualWeight)
+            + sevenDayAveragePoints.map(\.value)
+        let lower = (values.min() ?? plan.phaseTargetWeight) - 1
+        let upper = (values.max() ?? plan.startWeight) + 1
+        return lower...upper
+    }
+
+    private var waistYDomain: ClosedRange<Double> {
+        let values = waistRecords.compactMap(\.waist)
+        guard let minimum = values.min(), let maximum = values.max() else { return 0...1 }
+        let padding = max(2, (maximum - minimum) * 0.1)
+        return (minimum - padding)...(maximum + padding)
     }
 
     private var waistRecords: [DailyBodyRecord] {
