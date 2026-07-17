@@ -13,8 +13,8 @@ enum CloudRecordType: String {
 enum CloudRecordCodec {
     static let schemaVersion: Int64 = 1
 
-    static func record(for plan: WeightLossPlan) -> CKRecord {
-        let record = baseRecord(type: .plan, id: plan.id, updatedAt: plan.updatedAt, revision: plan.syncRevision)
+    static func record(for plan: WeightLossPlan, rebasing existing: CKRecord? = nil) -> CKRecord {
+        let record = baseRecord(type: .plan, id: plan.id, updatedAt: plan.updatedAt, revision: plan.syncRevision, existing: existing)
         set(record, "name", plan.name)
         set(record, "startDate", plan.startDate)
         set(record, "durationDays", plan.durationDays)
@@ -29,8 +29,8 @@ enum CloudRecordCodec {
         return record
     }
 
-    static func record(for body: DailyBodyRecord) -> CKRecord {
-        let record = baseRecord(type: .body, id: body.id, updatedAt: body.updatedAt, revision: body.syncRevision)
+    static func record(for body: DailyBodyRecord, rebasing existing: CKRecord? = nil) -> CKRecord {
+        let record = baseRecord(type: .body, id: body.id, updatedAt: body.updatedAt, revision: body.syncRevision, existing: existing)
         set(record, "planID", body.planID.uuidString.lowercased())
         set(record, "date", body.date)
         set(record, "actualWeight", body.actualWeight)
@@ -45,8 +45,8 @@ enum CloudRecordCodec {
         return record
     }
 
-    static func record(for meal: DailyMealPlan) -> CKRecord {
-        let record = baseRecord(type: .meal, id: meal.id, updatedAt: meal.updatedAt, revision: meal.syncRevision)
+    static func record(for meal: DailyMealPlan, rebasing existing: CKRecord? = nil) -> CKRecord {
+        let record = baseRecord(type: .meal, id: meal.id, updatedAt: meal.updatedAt, revision: meal.syncRevision, existing: existing)
         set(record, "planID", meal.planID.uuidString.lowercased())
         set(record, "date", meal.date)
         set(record, "breakfast", meal.breakfast)
@@ -66,8 +66,8 @@ enum CloudRecordCodec {
         return record
     }
 
-    static func record(for workout: DailyWorkoutPlan) -> CKRecord {
-        let record = baseRecord(type: .workout, id: workout.id, updatedAt: workout.updatedAt, revision: workout.syncRevision)
+    static func record(for workout: DailyWorkoutPlan, rebasing existing: CKRecord? = nil) -> CKRecord {
+        let record = baseRecord(type: .workout, id: workout.id, updatedAt: workout.updatedAt, revision: workout.syncRevision, existing: existing)
         set(record, "planID", workout.planID.uuidString.lowercased())
         set(record, "date", workout.date)
         set(record, "workoutType", workout.workoutType)
@@ -87,9 +87,16 @@ enum CloudRecordCodec {
         return record
     }
 
-    static func record(for tombstone: SyncTombstone) -> CKRecord {
+    static func record(for tombstone: SyncTombstone, rebasing existing: CKRecord? = nil) -> CKRecord {
         let recordID = CKRecord.ID(recordName: "tombstone-\(tombstone.recordName)", zoneID: CloudKitConstants.zoneID)
-        let record = CKRecord(recordType: CloudRecordType.tombstone.rawValue, recordID: recordID)
+        let record: CKRecord
+        if let existing,
+           existing.recordType == CloudRecordType.tombstone.rawValue,
+           existing.recordID == recordID {
+            record = existing
+        } else {
+            record = CKRecord(recordType: CloudRecordType.tombstone.rawValue, recordID: recordID)
+        }
         set(record, "schemaVersion", schemaVersion)
         set(record, "recordName", tombstone.recordName)
         set(record, "entityTypeRaw", tombstone.entityTypeRaw)
@@ -112,13 +119,21 @@ enum CloudRecordCodec {
         type: CloudRecordType,
         id: UUID,
         updatedAt: Date,
-        revision: Int
+        revision: Int,
+        existing: CKRecord?
     ) -> CKRecord {
         let recordID = CKRecord.ID(
             recordName: recordName(type: type, id: id),
             zoneID: CloudKitConstants.zoneID
         )
-        let record = CKRecord(recordType: type.rawValue, recordID: recordID)
+        let record: CKRecord
+        if let existing,
+           existing.recordType == type.rawValue,
+           existing.recordID == recordID {
+            record = existing
+        } else {
+            record = CKRecord(recordType: type.rawValue, recordID: recordID)
+        }
         set(record, "schemaVersion", schemaVersion)
         set(record, "id", id.uuidString.lowercased())
         set(record, "updatedAt", updatedAt)
@@ -129,6 +144,17 @@ enum CloudRecordCodec {
 
     static func recordName(type: CloudRecordType, id: UUID) -> String {
         "\(type.rawValue.lowercased())-\(id.uuidString.lowercased())"
+    }
+
+    static func rebasing(_ localRecord: CKRecord, onto serverRecord: CKRecord) -> CKRecord {
+        guard localRecord.recordID == serverRecord.recordID,
+              localRecord.recordType == serverRecord.recordType else {
+            return localRecord
+        }
+        for key in Set(localRecord.allKeys()).union(serverRecord.allKeys()) {
+            serverRecord[key] = localRecord[key]
+        }
+        return serverRecord
     }
 
     private static func set(_ record: CKRecord, _ key: String, _ value: String?) {

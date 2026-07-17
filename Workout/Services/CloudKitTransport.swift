@@ -7,6 +7,22 @@ struct CloudZoneChangeBatch {
     let changeToken: CKServerChangeToken?
 }
 
+struct CloudRecordLookupBatch {
+    let recordsByID: [CKRecord.ID: CKRecord]
+    let errorsByID: [CKRecord.ID: Error]
+}
+
+struct CloudModifyBatchResult {
+    let savedRecords: [CKRecord.ID: CKRecord]
+    let saveErrors: [CKRecord.ID: Error]
+    let deletedRecordIDs: Set<CKRecord.ID>
+    let deleteErrors: [CKRecord.ID: Error]
+
+    var firstError: Error? {
+        saveErrors.values.first ?? deleteErrors.values.first
+    }
+}
+
 actor CloudKitTransport {
     static let shared = CloudKitTransport()
 
@@ -58,6 +74,59 @@ actor CloudKitTransport {
             }
             database.add(operation)
         }
+    }
+
+    func fetchRecords(withIDs recordIDs: [CKRecord.ID]) async throws -> CloudRecordLookupBatch {
+        guard !recordIDs.isEmpty else {
+            return CloudRecordLookupBatch(recordsByID: [:], errorsByID: [:])
+        }
+        let results = try await database.records(for: recordIDs)
+        var records: [CKRecord.ID: CKRecord] = [:]
+        var errors: [CKRecord.ID: Error] = [:]
+        for (id, result) in results {
+            switch result {
+            case let .success(record): records[id] = record
+            case let .failure(error): errors[id] = error
+            }
+        }
+        return CloudRecordLookupBatch(recordsByID: records, errorsByID: errors)
+    }
+
+    func modifyRecords(
+        saving records: [CKRecord],
+        deleting recordIDs: [CKRecord.ID]
+    ) async throws -> CloudModifyBatchResult {
+        guard !records.isEmpty || !recordIDs.isEmpty else {
+            return CloudModifyBatchResult(savedRecords: [:], saveErrors: [:], deletedRecordIDs: [], deleteErrors: [:])
+        }
+        let results = try await database.modifyRecords(
+            saving: records,
+            deleting: recordIDs,
+            savePolicy: .ifServerRecordUnchanged,
+            atomically: false
+        )
+        var saved: [CKRecord.ID: CKRecord] = [:]
+        var saveErrors: [CKRecord.ID: Error] = [:]
+        for (id, result) in results.saveResults {
+            switch result {
+            case let .success(record): saved[id] = record
+            case let .failure(error): saveErrors[id] = error
+            }
+        }
+        var deleted = Set<CKRecord.ID>()
+        var deleteErrors: [CKRecord.ID: Error] = [:]
+        for (id, result) in results.deleteResults {
+            switch result {
+            case .success: deleted.insert(id)
+            case let .failure(error): deleteErrors[id] = error
+            }
+        }
+        return CloudModifyBatchResult(
+            savedRecords: saved,
+            saveErrors: saveErrors,
+            deletedRecordIDs: deleted,
+            deleteErrors: deleteErrors
+        )
     }
 }
 
