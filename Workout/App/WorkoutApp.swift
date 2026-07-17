@@ -34,19 +34,68 @@ private struct BootstrapView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
+    @AppStorage(AppLockSettings.enabledKey) private var isAppLockEnabled = false
     @State private var didAttemptSeed = false
+    @State private var isUnlocked = false
+    @State private var isAuthenticating = false
+    @State private var authenticationError: String?
 
     var body: some View {
         ZStack {
             RootView(notificationRouter: notificationRouter)
 
+            if isAppLockEnabled && !isUnlocked {
+                AppLockView(
+                    authenticationMethod: AppLockService.authenticationMethodName(),
+                    isAuthenticating: isAuthenticating,
+                    errorMessage: authenticationError,
+                    unlock: authenticate
+                )
+                .transition(.opacity)
+                .zIndex(1)
+            }
+
             if scenePhase != .active {
                 PrivacyShieldView()
                     .transition(.opacity)
-                    .zIndex(1)
+                    .zIndex(2)
             }
         }
         .animation(.easeOut(duration: 0.15), value: scenePhase)
+            .task {
+                guard isAppLockEnabled else {
+                    isUnlocked = true
+                    return
+                }
+                await authenticate()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .background:
+                    if isAppLockEnabled && !isAuthenticating {
+                        isUnlocked = false
+                        authenticationError = nil
+                    }
+                case .active:
+                    if isAppLockEnabled && !isUnlocked && !isAuthenticating {
+                        Task { await authenticate() }
+                    }
+                case .inactive:
+                    break
+                @unknown default:
+                    break
+                }
+            }
+            .onChange(of: isAppLockEnabled) { _, enabled in
+                if !enabled {
+                    isUnlocked = true
+                    authenticationError = nil
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AppLockSettings.didAuthenticate)) { _ in
+                isUnlocked = true
+                authenticationError = nil
+            }
             .task(id: activePlanID) {
                 try? await LocalReminderService.reschedule(
                     ReminderSettingsStore.load(),
@@ -67,6 +116,70 @@ private struct BootstrapView: View {
 
     private var activePlanID: UUID? {
         plans.first(where: { $0.status == .active })?.id
+    }
+
+    @MainActor
+    private func authenticate() async {
+        guard isAppLockEnabled, !isAuthenticating else { return }
+        isAuthenticating = true
+        authenticationError = nil
+        defer { isAuthenticating = false }
+
+        do {
+            try await AppLockService.authenticate(reason: "解锁减脂计划并查看你的健康记录")
+            isUnlocked = true
+        } catch {
+            isUnlocked = false
+            authenticationError = error.localizedDescription
+        }
+    }
+}
+
+private struct AppLockView: View {
+    let authenticationMethod: String
+    let isAuthenticating: Bool
+    let errorMessage: String?
+    let unlock: () async -> Void
+
+    var body: some View {
+        ZStack {
+            Color(uiColor: .systemBackground)
+                .ignoresSafeArea()
+            VStack(spacing: 18) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 54))
+                    .foregroundStyle(.tint)
+                Text("减脂计划已锁定")
+                    .font(.title2.bold())
+                Text("验证身份后可查看体型照片与健康记录")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                }
+
+                Button {
+                    Task { await unlock() }
+                } label: {
+                    if isAuthenticating {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Label("使用\(authenticationMethod)解锁", systemImage: "faceid")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isAuthenticating)
+            }
+            .padding(32)
+        }
     }
 }
 

@@ -94,7 +94,7 @@
 - [x] HealthKit 步数读取
 - [x] HealthKit 体重读取和写入
 - [x] CSV 导出
-- [ ] Face ID
+- [x] Face ID / 设备密码可选隐私锁（默认关闭）
 - [ ] iCloud / CloudKit 同步
 - [ ] Widget
 
