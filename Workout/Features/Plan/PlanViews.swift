@@ -125,6 +125,7 @@ private enum PlanDisplayMode: String, CaseIterable, Identifiable {
 struct MealPlanDetailView: View {
     @Bindable var plan: DailyMealPlan
     @State private var initialSyncFingerprint: String?
+    @State private var editorRequest: ActualFoodEntryEditorRequest?
 
     var body: some View {
         Form {
@@ -160,6 +161,35 @@ struct MealPlanDetailView: View {
                     set: { plan.snackStatus = $0 }
                 )
             )
+
+            actualMealSection(slot: .breakfast, title: "早餐")
+            actualMealSection(slot: .lunch, title: "午餐")
+            actualMealSection(slot: .dinner, title: "晚餐")
+            actualMealSection(slot: .snack, title: "加餐")
+
+            Section("实际摄入合计（估算）") {
+                LabeledContent("能量", value: formattedCalories(plan.actualCalories))
+                if let protein = plan.actualProtein {
+                    LabeledContent("蛋白质", value: formattedMacro(protein))
+                }
+                if let carbohydrates = plan.actualCarbohydrates {
+                    LabeledContent("碳水", value: formattedMacro(carbohydrates))
+                }
+                if let fat = plan.actualFat {
+                    LabeledContent("脂肪", value: formattedMacro(fat))
+                }
+                LabeledContent(
+                    "与计划差异",
+                    value: formattedCalories(plan.actualCalories - Double(plan.plannedCalories), signed: true)
+                )
+                LabeledContent(
+                    "目标剩余量",
+                    value: formattedCalories(Double(plan.plannedCalories) - plan.actualCalories)
+                )
+                Text("营养值来自你输入的快照，仅作为估算参考；保存后不会因数据库变化而自动改变。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             Section("全天目标") {
                 LabeledContent("热量", value: "\(plan.plannedCalories) kcal")
@@ -199,6 +229,13 @@ struct MealPlanDetailView: View {
                 plan.syncRevision += 1
             }
         }
+        .sheet(item: $editorRequest) { request in
+            ActualFoodEntryEditorView(
+                entry: request.entry,
+                mealSlot: request.mealSlot,
+                onSave: upsertActualFoodEntry
+            )
+        }
     }
 
     private func mealSection(
@@ -214,6 +251,90 @@ struct MealPlanDetailView: View {
                 }
             }
         }
+    }
+
+    private func actualMealSection(slot: MealSlot, title: String) -> some View {
+        let entries = plan.actualFoodEntries.filter { $0.mealSlot == slot }
+
+        return Section("实际\(title)") {
+            if entries.isEmpty {
+                Text("尚未记录实际进食")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(entries) { entry in
+                    Button {
+                        editorRequest = ActualFoodEntryEditorRequest(entry: entry, mealSlot: slot)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(entry.foodName)
+                                    .foregroundStyle(.primary)
+                                Text("\(entry.amount.formatted(.number.precision(.fractionLength(0...1)))) \(entry.unit)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(formattedCalories(entry.calories))
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing) {
+                        Button("删除", role: .destructive) {
+                            removeActualFoodEntry(entry)
+                        }
+                    }
+                }
+
+                LabeledContent("本餐能量", value: formattedCalories(entries.reduce(0) { $0 + $1.calories }))
+                if let protein = optionalTotal(entries.map(\.protein)) {
+                    LabeledContent("本餐蛋白质", value: formattedMacro(protein))
+                }
+            }
+
+            Button {
+                editorRequest = ActualFoodEntryEditorRequest(entry: nil, mealSlot: slot)
+            } label: {
+                Label("添加实际进食", systemImage: "plus.circle")
+            }
+        }
+    }
+
+    private func upsertActualFoodEntry(_ entry: ActualFoodEntry) {
+        var entries = plan.actualFoodEntries
+        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+            entries[index] = entry
+        } else {
+            entries.append(entry)
+        }
+        plan.actualFoodEntries = entries
+        markMealAsChanged()
+    }
+
+    private func removeActualFoodEntry(_ entry: ActualFoodEntry) {
+        plan.actualFoodEntries.removeAll { $0.id == entry.id }
+        markMealAsChanged()
+    }
+
+    private func markMealAsChanged() {
+        plan.updatedAt = .now
+        plan.syncRevision += 1
+        initialSyncFingerprint = syncFingerprint
+    }
+
+    private func formattedCalories(_ value: Double, signed: Bool = false) -> String {
+        let prefix = signed && value > 0 ? "+" : ""
+        return "\(prefix)\(value.formatted(.number.precision(.fractionLength(0)))) kcal"
+    }
+
+    private func formattedMacro(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(0...1)))) g"
+    }
+
+    private func optionalTotal(_ values: [Double?]) -> Double? {
+        guard values.contains(where: { $0 != nil }) else { return nil }
+        return values.compactMap { $0 }.reduce(0, +)
     }
 
     private func statusBinding(
@@ -245,8 +366,148 @@ struct MealPlanDetailView: View {
             plan.snackStatusRaw,
             plan.hungerLevel.map { String($0) } ?? "",
             plan.actualWater.map { String($0) } ?? "",
-            plan.note
+            plan.note,
+            plan.actualFoodEntriesJSON
         ].joined(separator: "|")
+    }
+}
+
+private struct ActualFoodEntryEditorRequest: Identifiable {
+    let id = UUID()
+    let entry: ActualFoodEntry?
+    let mealSlot: MealSlot
+}
+
+private struct ActualFoodEntryEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let entry: ActualFoodEntry?
+    let mealSlot: MealSlot
+    let onSave: (ActualFoodEntry) -> Void
+
+    @State private var foodName: String
+    @State private var amount: String
+    @State private var unit: String
+    @State private var basisAmount: String
+    @State private var calories: String
+    @State private var protein: String
+    @State private var carbohydrates: String
+    @State private var fat: String
+    @State private var validationMessage: String?
+
+    init(
+        entry: ActualFoodEntry?,
+        mealSlot: MealSlot,
+        onSave: @escaping (ActualFoodEntry) -> Void
+    ) {
+        self.entry = entry
+        self.mealSlot = mealSlot
+        self.onSave = onSave
+        _foodName = State(initialValue: entry?.foodName ?? "")
+        _amount = State(initialValue: entry.map { String($0.amount) } ?? "")
+        _unit = State(initialValue: entry?.unit ?? "g")
+        _basisAmount = State(initialValue: entry.map { String($0.nutritionBasisAmount) } ?? "100")
+        _calories = State(initialValue: entry.map { String($0.caloriesPerBasis) } ?? "")
+        _protein = State(initialValue: entry?.proteinPerBasis.map { String($0) } ?? "")
+        _carbohydrates = State(initialValue: entry?.carbohydratesPerBasis.map { String($0) } ?? "")
+        _fat = State(initialValue: entry?.fatPerBasis.map { String($0) } ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("本次进食") {
+                    LabeledContent("餐次", value: mealSlot.displayName)
+                    TextField("食物名称，例如熟米饭", text: $foodName)
+                    TextField("实际数量", text: $amount)
+                        .keyboardType(.decimalPad)
+                    TextField("单位，例如 g、ml、份", text: $unit)
+                }
+
+                Section("营养快照") {
+                    TextField("营养基准数量，例如 100", text: $basisAmount)
+                        .keyboardType(.decimalPad)
+                    TextField("每基准量能量（kcal）", text: $calories)
+                        .keyboardType(.decimalPad)
+                    TextField("蛋白质（g，可选）", text: $protein)
+                        .keyboardType(.decimalPad)
+                    TextField("碳水（g，可选）", text: $carbohydrates)
+                        .keyboardType(.decimalPad)
+                    TextField("脂肪（g，可选）", text: $fat)
+                        .keyboardType(.decimalPad)
+                } footer: {
+                    Text("例如：熟米饭 200 g；营养基准数量填 100，每基准量能量填 116。")
+                }
+            }
+            .navigationTitle(entry == nil ? "添加实际进食" : "编辑实际进食")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") { save() }
+                }
+            }
+            .alert("无法保存", isPresented: Binding(
+                get: { validationMessage != nil },
+                set: { if !$0 { validationMessage = nil } }
+            )) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(validationMessage ?? "请检查输入。")
+            }
+        }
+    }
+
+    private func save() {
+        let name = foodName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedUnit = unit.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { validationMessage = "请输入食物名称。"; return }
+        guard !normalizedUnit.isEmpty else { validationMessage = "请输入数量单位。"; return }
+        guard let amountValue = parsePositive(amount),
+              let basisValue = parsePositive(basisAmount) else {
+            validationMessage = "实际数量和营养基准数量必须是大于 0 的数字。"
+            return
+        }
+        guard let calorieValue = parseNonNegative(calories) else {
+            validationMessage = "每基准量能量必须是 0 或更大的数字。"
+            return
+        }
+
+        let result = ActualFoodEntry(
+            id: entry?.id ?? UUID(),
+            mealSlot: mealSlot,
+            foodName: name,
+            amount: amountValue,
+            unit: normalizedUnit,
+            nutritionBasisAmount: basisValue,
+            caloriesPerBasis: calorieValue,
+            proteinPerBasis: parseOptionalNonNegative(protein),
+            carbohydratesPerBasis: parseOptionalNonNegative(carbohydrates),
+            fatPerBasis: parseOptionalNonNegative(fat),
+            dataSource: entry?.dataSource ?? .manual,
+            confidence: entry?.confidence,
+            isConfirmed: true
+        )
+        onSave(result)
+        dismiss()
+    }
+
+    private func parsePositive(_ text: String) -> Double? {
+        guard let value = parseNonNegative(text), value > 0 else { return nil }
+        return value
+    }
+
+    private func parseNonNegative(_ text: String) -> Double? {
+        let normalized = text.replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(normalized), value.isFinite, value >= 0 else { return nil }
+        return value
+    }
+
+    private func parseOptionalNonNegative(_ text: String) -> Double? {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return parseNonNegative(text)
     }
 }
 

@@ -63,7 +63,7 @@ Record 类型：
 |---|---|
 | `WLPlan` | 计划全部持久化字段、`updatedAt`、`schemaVersion` |
 | `WLBody` | 身体记录字段、三个照片版本、`updatedAt` |
-| `WLMeal` | 饮食计划及执行字段、`updatedAt` |
+| `WLMeal` | 饮食计划、执行字段、实际进食营养快照、`updatedAt` |
 | `WLWorkout` | 锻炼计划及执行字段、`updatedAt` |
 | `WLPhoto` | 所属身体记录、角度、`CKAsset`、哈希、更新时间 |
 | `WLTombstone` | 原 Record Name、类型、删除时间、设备 ID |

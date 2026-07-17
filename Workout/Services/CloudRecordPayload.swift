@@ -121,6 +121,7 @@ struct CloudMealPayload {
     let hungerLevel: Int?
     let actualWater: Double?
     let note: String
+    let actualFoodEntriesJSON: String
 
     init(record: CKRecord) throws {
         identity = try CloudPayloadIdentity(record: record)
@@ -140,6 +141,7 @@ struct CloudMealPayload {
         hungerLevel = record.int("hungerLevel")
         actualWater = record.double("actualWater")
         note = record.string("note") ?? ""
+        actualFoodEntriesJSON = record.string("actualFoodEntriesJSON") ?? "[]"
     }
 }
 
