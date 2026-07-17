@@ -72,7 +72,7 @@ struct WeeklyReviewDetailView: View {
         }
         .navigationTitle("第 \(summary.weekIndex) 周复盘")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("确认调整后续计划？", isPresented: Binding(get: { proposedAdjustment != nil }, set: { if !$0 { proposedAdjustment = nil } }), titleVisibility: .visible) {
+        .alert("确认调整后续计划？", isPresented: Binding(get: { proposedAdjustment != nil }, set: { if !$0 { proposedAdjustment = nil } })) {
             if let adjustment = proposedAdjustment {
                 Button(adjustment.confirmTitle) { apply(adjustment) }
                 Button("取消", role: .cancel) { proposedAdjustment = nil }

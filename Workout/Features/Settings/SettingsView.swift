@@ -131,13 +131,12 @@ struct SettingsView: View {
 #endif
         }
         .navigationTitle("设置")
-        .confirmationDialog(
+        .alert(
             pendingStatus?.confirmationTitle ?? "更改计划状态？",
             isPresented: Binding(
                 get: { pendingStatus != nil },
                 set: { if !$0 { pendingStatus = nil } }
-            ),
-            titleVisibility: .visible
+            )
         ) {
             if let pendingStatus {
                 Button(pendingStatus.confirmationButtonTitle, role: pendingStatus == .abandoned ? .destructive : nil) {
@@ -162,7 +161,7 @@ struct SettingsView: View {
             Text(statusErrorMessage ?? "")
         }
 #if DEBUG
-        .confirmationDialog("生成测试数据？", isPresented: $showTestDataConfirmation, titleVisibility: .visible) {
+        .alert("生成测试数据？", isPresented: $showTestDataConfirmation) {
             Button("确认生成", role: .destructive) { generateTestData() }
             Button("取消", role: .cancel) {}
         } message: {

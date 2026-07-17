@@ -127,7 +127,7 @@ struct PlanHistoryDetailView: View {
         }
         .navigationTitle(plan.name)
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("重新开启这个计划？", isPresented: $showResumeConfirmation, titleVisibility: .visible) {
+        .alert("重新开启这个计划？", isPresented: $showResumeConfirmation) {
             Button("确认重新开启") { resumePlan() }
             Button("取消", role: .cancel) {}
         } message: {
