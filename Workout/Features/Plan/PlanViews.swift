@@ -438,6 +438,24 @@ private struct ActualFoodEntryEditorView: View {
                 } footer: {
                     Text("例如：熟米饭 200 g；营养基准数量填 100，每基准量能量填 116。")
                 }
+
+                Section("本条估算") {
+                    if let calories = previewCalories {
+                        LabeledContent("能量", value: formattedCalories(calories))
+                        if let protein = previewMacro(protein) {
+                            LabeledContent("蛋白质", value: formattedMacro(protein))
+                        }
+                        if let carbohydrates = previewMacro(carbohydrates) {
+                            LabeledContent("碳水", value: formattedMacro(carbohydrates))
+                        }
+                        if let fat = previewMacro(fat) {
+                            LabeledContent("脂肪", value: formattedMacro(fat))
+                        }
+                    } else {
+                        Text("输入实际数量、营养基准数量和能量后显示估算结果。")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .navigationTitle(entry == nil ? "添加实际进食" : "编辑实际进食")
             .navigationBarTitleDisplayMode(.inline)
@@ -512,6 +530,28 @@ private struct ActualFoodEntryEditorView: View {
     private func parseOptionalNonNegative(_ text: String) -> Double? {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return parseNonNegative(text)
+    }
+
+    private var previewCalories: Double? {
+        guard let amountValue = parsePositive(amount),
+              let basisValue = parsePositive(basisAmount),
+              let calorieValue = parseNonNegative(calories) else { return nil }
+        return max(0, calorieValue * amountValue / basisValue)
+    }
+
+    private func formattedCalories(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(0)))) kcal"
+    }
+
+    private func formattedMacro(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(0...1)))) g"
+    }
+
+    private func previewMacro(_ text: String) -> Double? {
+        guard let perBasis = parseOptionalNonNegative(text),
+              let amountValue = parsePositive(amount),
+              let basisValue = parsePositive(basisAmount) else { return nil }
+        return max(0, perBasis * amountValue / basisValue)
     }
 
     private func isValidOptionalNumber(_ text: String) -> Bool {
