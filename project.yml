@@ -23,6 +23,18 @@ targets:
     info:
       path: Workout/Info.plist
       properties:
+        CFBundleDisplayName: 减脂计划
+        NSPhotoLibraryUsageDescription: 用于选择和保存体型记录照片。
+        NSCameraUsageDescription: 用于拍摄正面、侧面和背面体型照片。
+        NSMicrophoneUsageDescription: 用于在拍摄体型照片时识别“拍照”语音口令。
+        NSSpeechRecognitionUsageDescription: 用于识别“拍照”或“茄子”口令并自动触发相机快门。
+        NSHealthShareUsageDescription: 用于在你主动同步时读取当天步数，并填入减脂计划的锻炼记录。
+        NSHealthUpdateUsageDescription: 用于在你确认后，将身体记录中的体重保存到健康 App。
+        NSFaceIDUsageDescription: 用于解锁减脂计划，保护体型照片和健康记录。
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIBackgroundModes:
           - remote-notification
         UILaunchStoryboardName: LaunchScreen
@@ -34,18 +46,6 @@ targets:
         DEVELOPMENT_TEAM: E393H8D2JP
         CODE_SIGN_IDENTITY: Apple Development
         CODE_SIGN_ENTITLEMENTS: Workout/Workout.entitlements
-        INFOPLIST_KEY_CFBundleDisplayName: 减脂计划
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 用于选择和保存体型记录照片。
-        INFOPLIST_KEY_NSCameraUsageDescription: 用于拍摄正面、侧面和背面体型照片。
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: 用于在拍摄体型照片时识别“拍照”语音口令。
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: 用于识别“拍照”或“茄子”口令并自动触发相机快门。
-        INFOPLIST_KEY_NSHealthShareUsageDescription: 用于在你主动同步时读取当天步数，并填入减脂计划的锻炼记录。
-        INFOPLIST_KEY_NSHealthUpdateUsageDescription: 用于在你确认后，将身体记录中的体重保存到健康 App。
-        INFOPLIST_KEY_NSFaceIDUsageDescription: 用于解锁减脂计划，保护体型照片和健康记录。
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
-          - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         TARGETED_DEVICE_FAMILY: "1"
   WorkoutTests:
     type: bundle.unit-test
