@@ -20,6 +20,11 @@ targets:
           enabled: 1
     sources:
       - path: Workout
+    info:
+      path: Workout/Info.plist
+      properties:
+        UIBackgroundModes:
+          - remote-notification
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lingfengmarskey.workout
@@ -28,7 +33,6 @@ targets:
         DEVELOPMENT_TEAM: E393H8D2JP
         CODE_SIGN_IDENTITY: Apple Development
         CODE_SIGN_ENTITLEMENTS: Workout/Workout.entitlements
-        GENERATE_INFOPLIST_FILE: true
         INFOPLIST_KEY_CFBundleDisplayName: 减脂计划
         INFOPLIST_KEY_UILaunchScreen_Generation: true
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 用于选择和保存体型记录照片。
@@ -38,8 +42,6 @@ targets:
         INFOPLIST_KEY_NSHealthShareUsageDescription: 用于在你主动同步时读取当天步数，并填入减脂计划的锻炼记录。
         INFOPLIST_KEY_NSHealthUpdateUsageDescription: 用于在你确认后，将身体记录中的体重保存到健康 App。
         INFOPLIST_KEY_NSFaceIDUsageDescription: 用于解锁减脂计划，保护体型照片和健康记录。
-        INFOPLIST_KEY_UIBackgroundModes:
-          - remote-notification
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

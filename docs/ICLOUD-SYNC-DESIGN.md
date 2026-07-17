@@ -13,7 +13,7 @@
 
 ## 2. 不采用 SwiftData 自动 CloudKit 镜像
 
-当前模型包含 `@Attribute(.unique)`。SwiftData 的自动 CloudKit 同步不支持唯一约束；自动镜像也难以提供可靠的单次同步完成回调、逐项错误、用户可控的运行期开关，以及照片文件与数据库记录的一致迁移。
+当前模型包含 `@Attribute(.unique)`。SwiftData 的自动 CloudKit 同步不支持唯一约束；自动镜像也难以提供可靠的单次同步完成回调、逐项错误、用户可控的运行期开关，以及照片文件与数据库记录的一致迁移。因此 `ModelConfiguration` 必须显式使用 `cloudKitDatabase: .none`，CloudKit 只由 `CloudSyncEngine` 通过手动传输层访问。
 
 本项目采用：
 
