@@ -3,6 +3,36 @@ import XCTest
 @testable import Workout
 
 final class WorkoutSchemaMigrationTests: XCTestCase {
+    func testMigratesV2StoreToV3AndAddsPhotoMetadataTable() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("workout-v3-migration-\(UUID().uuidString).store")
+        defer { removeStoreFiles(at: storeURL) }
+
+        let planID = UUID()
+        try autoreleasepool {
+            let schema = Schema(versionedSchema: WorkoutSchemaV2.self)
+            let configuration = ModelConfiguration("V3MigrationTest", schema: schema, url: storeURL)
+            let context = ModelContext(try ModelContainer(for: schema, configurations: [configuration]))
+            context.insert(WorkoutSchemaV2.WeightLossPlan(
+                id: planID, name: "V2 计划", startDate: .now, durationDays: 7,
+                startWeight: 90, phaseTargetWeight: 88, finalTargetWeight: 80,
+                dailyCalorieTarget: 1_900, dailyProteinTarget: 140, dailyWaterTarget: 2.2
+            ))
+            try context.save()
+        }
+
+        let schema = Schema(versionedSchema: WorkoutSchemaV3.self)
+        let configuration = ModelConfiguration("V3MigrationTest", schema: schema, url: storeURL)
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: [configuration]
+        )
+        let context = ModelContext(container)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WorkoutSchemaV2.WeightLossPlan>()).first?.id, planID)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutSchemaV3.PhotoSyncMetadata>()).isEmpty)
+    }
+
     func testMigratesV1StoreToV2WithoutLosingExistingRecords() throws {
         let storeURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("workout-migration-\(UUID().uuidString).store")

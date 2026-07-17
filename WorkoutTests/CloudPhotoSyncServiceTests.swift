@@ -129,6 +129,53 @@ final class CloudPhotoSyncServiceTests: XCTestCase {
         XCTAssertNil(BodyPhotoStore.shared.contentHash(for: identifier))
     }
 
+    func testUnrelatedBodyEditDoesNotAdvancePhotoMutationVersion() throws {
+        let context = try makeContext()
+        let body = DailyBodyRecord(planID: UUID(), date: .now)
+        context.insert(body)
+        let photoDate = Date(timeIntervalSince1970: 100)
+        try CloudPhotoSyncService.stageLocalMutation(
+            bodyID: body.id,
+            angle: .front,
+            contentHash: "photo-hash",
+            at: photoDate,
+            in: context
+        )
+        body.actualWeight = 90
+        body.updatedAt = Date(timeIntervalSince1970: 200)
+        try context.save()
+
+        let metadata = try XCTUnwrap(context.fetch(FetchDescriptor<PhotoSyncMetadata>()).first)
+        XCTAssertEqual(metadata.updatedAt, photoDate)
+        XCTAssertEqual(metadata.contentHash, "photo-hash")
+    }
+
+    func testDeletingWholeBodyStagesAllAngleDeletionMarkers() throws {
+        let context = try makeContext()
+        let plan = WeightLossPlan(
+            name: "删除测试", startDate: .now, durationDays: 7,
+            startWeight: 90, phaseTargetWeight: 88, finalTargetWeight: 80,
+            dailyCalorieTarget: 1_900, dailyProteinTarget: 140, dailyWaterTarget: 2.2
+        )
+        let body = DailyBodyRecord(planID: plan.id, date: .now)
+        context.insert(plan)
+        context.insert(body)
+        try context.save()
+
+        try SyncDeletionService.deletePlanGraph(
+            plan: plan,
+            bodyRecords: [body],
+            mealPlans: [],
+            workoutPlans: [],
+            from: context
+        )
+        try context.save()
+
+        let markers = try context.fetch(FetchDescriptor<PhotoSyncMetadata>())
+        XCTAssertEqual(Set(markers.map(\.angleRaw)), Set(CloudPhotoAngle.allCases.map(\.rawValue)))
+        XCTAssertTrue(markers.allSatisfy(\.isDeleted))
+    }
+
     private func makePhotoRecord(
         bodyID: UUID,
         angle: CloudPhotoAngle,

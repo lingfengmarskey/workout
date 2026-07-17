@@ -39,6 +39,15 @@ enum SyncDeletionService {
 
         for record in bodyRecords {
             try stageDeletion(id: record.id, entityType: .bodyRecord, in: context, deletedAt: deletedAt)
+            for angle in CloudPhotoAngle.allCases {
+                try CloudPhotoSyncService.stageLocalMutation(
+                    bodyID: record.id,
+                    angle: angle,
+                    contentHash: nil,
+                    at: deletedAt,
+                    in: context
+                )
+            }
             context.delete(record)
         }
         for meal in mealPlans {

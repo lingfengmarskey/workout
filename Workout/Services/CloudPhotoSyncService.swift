@@ -38,11 +38,11 @@ struct CloudPhotoPayload {
 @MainActor
 enum CloudPhotoSyncService {
     private struct Candidate {
-        let body: DailyBodyRecord
+        let bodyID: UUID
         let metadata: PhotoSyncMetadata
         let identifier: String?
         @MainActor var recordID: CKRecord.ID {
-            CKRecord.ID(recordName: recordName(bodyID: body.id, angle: metadata.angle), zoneID: CloudKitConstants.zoneID)
+            CKRecord.ID(recordName: recordName(bodyID: bodyID, angle: metadata.angle), zoneID: CloudKitConstants.zoneID)
         }
     }
 
@@ -85,31 +85,29 @@ enum CloudPhotoSyncService {
     static func uploadLocalPhotos(changedSince lastSync: Date?, state: CloudSyncState, context: ModelContext) async throws {
         let cutoff = lastSync ?? .distantPast
         let bodies = try context.fetch(FetchDescriptor<DailyBodyRecord>()).filter { $0.updatedAt > cutoff }
-        let allIDs = bodies.flatMap { body in CloudPhotoAngle.allCases.map { recordID(bodyID: body.id, angle: $0) } }
-        let lookup = try await CloudKitTransport.shared.fetchRecords(withIDs: allIDs)
-        if let error = lookup.errorsByID.values.first(where: { ($0 as? CKError)?.code != .unknownItem }) { throw error }
-
-        var candidates: [Candidate] = []
         var metadata = try context.fetch(FetchDescriptor<PhotoSyncMetadata>())
         for body in bodies {
             for angle in CloudPhotoAngle.allCases {
                 let id = PhotoSyncMetadata.identifier(bodyID: body.id, angle: angle)
                 let hash = expectedHash(for: angle, body: body)
-                let serverExists = lookup.recordsByID[recordID(bodyID: body.id, angle: angle)] != nil
-                guard hash != nil || serverExists || metadata.contains(where: { $0.id == id }) else { continue }
-                let item = metadata.first(where: { $0.id == id }) ?? {
+                guard hash != nil || metadata.contains(where: { $0.id == id }) else { continue }
+                _ = metadata.first(where: { $0.id == id }) ?? {
                     let created = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: body.updatedAt, isDeleted: hash == nil)
                     context.insert(created); metadata.append(created); return created
                 }()
-                if item.contentHash != hash || item.isDeleted != (hash == nil) {
-                    item.contentHash = hash
-                    item.isDeleted = hash == nil
-                    item.updatedAt = body.updatedAt
-                    item.deviceID = SyncDeviceIdentity.current
-                }
-                candidates.append(Candidate(body: body, metadata: item, identifier: identifier(for: angle, body: body)))
             }
         }
+        let bodyByID = Dictionary(uniqueKeysWithValues: try context.fetch(FetchDescriptor<DailyBodyRecord>()).map { ($0.id, $0) })
+        let candidates = metadata.filter { $0.updatedAt > cutoff }.map { item in
+            Candidate(
+                bodyID: item.bodyID,
+                metadata: item,
+                identifier: bodyByID[item.bodyID].flatMap { identifier(for: item.angle, body: $0) }
+            )
+        }
+        let allIDs = candidates.map(\.recordID)
+        let lookup = try await CloudKitTransport.shared.fetchRecords(withIDs: allIDs)
+        if let error = lookup.errorsByID.values.first(where: { ($0 as? CKError)?.code != .unknownItem }) { throw error }
         state.pendingPhotoCount = candidates.count
         try context.save()
 
@@ -138,6 +136,32 @@ enum CloudPhotoSyncService {
         "wlphoto-\(bodyID.uuidString.lowercased())-\(angle.rawValue)"
     }
 
+    static func stageLocalMutation(
+        bodyID: UUID,
+        angle: CloudPhotoAngle,
+        contentHash: String?,
+        at timestamp: Date,
+        in context: ModelContext
+    ) throws {
+        let id = PhotoSyncMetadata.identifier(bodyID: bodyID, angle: angle)
+        let all = try context.fetch(FetchDescriptor<PhotoSyncMetadata>())
+        let item = all.first(where: { $0.id == id }) ?? {
+            let created = PhotoSyncMetadata(
+                bodyID: bodyID,
+                angle: angle,
+                contentHash: contentHash,
+                updatedAt: timestamp,
+                isDeleted: contentHash == nil
+            )
+            context.insert(created)
+            return created
+        }()
+        item.contentHash = contentHash
+        item.updatedAt = timestamp
+        item.deviceID = SyncDeviceIdentity.current
+        item.isDeleted = contentHash == nil
+    }
+
     private static func recordID(bodyID: UUID, angle: CloudPhotoAngle) -> CKRecord.ID {
         CKRecord.ID(recordName: recordName(bodyID: bodyID, angle: angle), zoneID: CloudKitConstants.zoneID)
     }
@@ -145,7 +169,7 @@ enum CloudPhotoSyncService {
     private static func record(for candidate: Candidate, rebasing existing: CKRecord?) throws -> CKRecord {
         let record = existing ?? CKRecord(recordType: CloudRecordType.photo.rawValue, recordID: candidate.recordID)
         record["schemaVersion"] = NSNumber(value: CloudRecordCodec.schemaVersion)
-        record["bodyID"] = candidate.body.id.uuidString.lowercased() as CKRecordValue
+        record["bodyID"] = candidate.bodyID.uuidString.lowercased() as CKRecordValue
         record["angle"] = candidate.metadata.angle.rawValue as CKRecordValue
         record["contentHash"] = candidate.metadata.contentHash as CKRecordValue?
         record["updatedAt"] = candidate.metadata.updatedAt as CKRecordValue

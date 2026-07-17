@@ -98,7 +98,17 @@ final class BodyPhotoStore {
     /// Use this entry point whenever a body record is removed so its files cannot be orphaned.
     func delete(record: DailyBodyRecord, from context: ModelContext) throws {
         let identifiers = [record.frontPhotoPath, record.sidePhotoPath, record.backPhotoPath]
-        try SyncDeletionService.stageDeletion(id: record.id, entityType: .bodyRecord, in: context)
+        let deletedAt = Date.now
+        try SyncDeletionService.stageDeletion(id: record.id, entityType: .bodyRecord, in: context, deletedAt: deletedAt)
+        for angle in CloudPhotoAngle.allCases {
+            try CloudPhotoSyncService.stageLocalMutation(
+                bodyID: record.id,
+                angle: angle,
+                contentHash: nil,
+                at: deletedAt,
+                in: context
+            )
+        }
         context.delete(record)
         try context.save()
         identifiers.forEach { try? delete(identifier: $0) }
