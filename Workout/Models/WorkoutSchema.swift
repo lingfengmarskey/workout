@@ -36,19 +36,39 @@ enum WorkoutSchemaV3: VersionedSchema {
     static var versionIdentifier = Schema.Version(3, 0, 0)
 
     static var models: [any PersistentModel.Type] {
+        // V3 was shipped with the V2 model types plus the photo metadata
+        // model. Keep that exact list so stores created by that release can
+        // be migrated to the corrected V4 schema below.
         WorkoutSchemaV2.models + [WorkoutSchemaV3.PhotoSyncMetadata.self]
+    }
+}
+
+enum WorkoutSchemaV4: VersionedSchema {
+    static var versionIdentifier = Schema.Version(4, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [
+            WorkoutSchemaV4.WeightLossPlan.self,
+            WorkoutSchemaV4.DailyBodyRecord.self,
+            WorkoutSchemaV4.DailyMealPlan.self,
+            WorkoutSchemaV4.DailyWorkoutPlan.self,
+            WorkoutSchemaV4.SyncTombstone.self,
+            WorkoutSchemaV4.CloudSyncState.self,
+            WorkoutSchemaV4.PhotoSyncMetadata.self
+        ]
     }
 }
 
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [WorkoutSchemaV1.self, WorkoutSchemaV2.self, WorkoutSchemaV3.self]
+        [WorkoutSchemaV1.self, WorkoutSchemaV2.self, WorkoutSchemaV3.self, WorkoutSchemaV4.self]
     }
 
     static var stages: [MigrationStage] {
         [
             .lightweight(fromVersion: WorkoutSchemaV1.self, toVersion: WorkoutSchemaV2.self),
-            .lightweight(fromVersion: WorkoutSchemaV2.self, toVersion: WorkoutSchemaV3.self)
+            .lightweight(fromVersion: WorkoutSchemaV2.self, toVersion: WorkoutSchemaV3.self),
+            .lightweight(fromVersion: WorkoutSchemaV3.self, toVersion: WorkoutSchemaV4.self)
         ]
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-extension WorkoutSchemaV3 {
+extension WorkoutSchemaV4 {
 @Model
 final class PhotoSyncMetadata {
     @Attribute(.unique) var id: String
@@ -38,3 +38,5 @@ final class PhotoSyncMetadata {
     }
 }
 }
+
+typealias PhotoSyncMetadata = WorkoutSchemaV4.PhotoSyncMetadata

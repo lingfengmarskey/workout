@@ -1,47 +1,12 @@
 import Foundation
 import SwiftData
 
-enum PlanStatus: String, Codable, CaseIterable, Identifiable {
-    case notStarted
-    case active
-    case paused
-    case completed
-    case abandoned
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .notStarted: "未开始"
-        case .active: "进行中"
-        case .paused: "已暂停"
-        case .completed: "已完成"
-        case .abandoned: "已放弃"
-        }
-    }
-}
-
-enum CompletionStatus: String, Codable, CaseIterable, Identifiable {
-    case notRecorded
-    case completed
-    case partial
-    case missed
-    case rest
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .notRecorded: "未记录"
-        case .completed: "完成"
-        case .partial: "部分完成"
-        case .missed: "未完成"
-        case .rest: "休息"
-        }
-    }
-}
-
-extension WorkoutSchemaV1 {
+/// Models for the corrected current persisted schema.
+///
+/// VersionedSchema model types must be declared in the schema namespace for
+/// each version. Reusing the V2 model types in V3 makes SwiftData unable to
+/// resolve the V2 → V3 store on some devices.
+extension WorkoutSchemaV4 {
 @Model
 final class WeightLossPlan {
     @Attribute(.unique) var id: UUID
@@ -57,6 +22,7 @@ final class WeightLossPlan {
     var statusRaw: String
     var createdAt: Date
     var updatedAt: Date
+    var syncRevision: Int = 0
 
     init(
         id: UUID = UUID(),
@@ -103,7 +69,6 @@ final class WeightLossPlan {
         let elapsedDays = calendar.dateComponents([.day], from: startDate, to: normalizedDate).day ?? 0
         let clampedDay = min(max(elapsedDays, 0), max(durationDays - 1, 0))
         guard durationDays > 1 else { return phaseTargetWeight }
-
         let progress = Double(clampedDay) / Double(durationDays - 1)
         return startWeight - ((startWeight - phaseTargetWeight) * progress)
     }
@@ -124,6 +89,10 @@ final class DailyBodyRecord {
     var note: String
     var createdAt: Date
     var updatedAt: Date
+    var syncRevision: Int = 0
+    var frontPhotoHash: String?
+    var sidePhotoHash: String?
+    var backPhotoHash: String?
 
     init(id: UUID = UUID(), planID: UUID, date: Date) {
         self.id = id
@@ -154,6 +123,8 @@ final class DailyMealPlan {
     var hungerLevel: Int?
     var actualWater: Double?
     var note: String
+    var updatedAt: Date = Date.now
+    var syncRevision: Int = 0
 
     init(
         id: UUID = UUID(),
@@ -188,26 +159,20 @@ final class DailyMealPlan {
         get { CompletionStatus(rawValue: breakfastStatusRaw) ?? .notRecorded }
         set { breakfastStatusRaw = newValue.rawValue }
     }
-
     var lunchStatus: CompletionStatus {
         get { CompletionStatus(rawValue: lunchStatusRaw) ?? .notRecorded }
         set { lunchStatusRaw = newValue.rawValue }
     }
-
     var dinnerStatus: CompletionStatus {
         get { CompletionStatus(rawValue: dinnerStatusRaw) ?? .notRecorded }
         set { dinnerStatusRaw = newValue.rawValue }
     }
-
     var snackStatus: CompletionStatus {
         get { CompletionStatus(rawValue: snackStatusRaw) ?? .notRecorded }
         set { snackStatusRaw = newValue.rawValue }
     }
-
     var completedMealCount: Int {
-        [breakfastStatus, lunchStatus, dinnerStatus, snackStatus]
-            .filter { $0 == .completed }
-            .count
+        [breakfastStatus, lunchStatus, dinnerStatus, snackStatus].filter { $0 == .completed }.count
     }
 }
 
@@ -230,6 +195,8 @@ final class DailyWorkoutPlan {
     var fatigueLevel: Int?
     var painDescription: String
     var note: String
+    var updatedAt: Date = Date.now
+    var syncRevision: Int = 0
 
     init(
         id: UUID = UUID(),
@@ -265,13 +232,57 @@ final class DailyWorkoutPlan {
         set { statusRaw = newValue.rawValue }
     }
 }
+
+@Model
+final class SyncTombstone {
+    @Attribute(.unique) var id: UUID
+    var recordName: String
+    var entityTypeRaw: String
+    var deletedAt: Date
+    var deviceID: String
+    var isUploaded: Bool
+
+    init(
+        id: UUID = UUID(),
+        recordName: String,
+        entityType: SyncEntityType,
+        deletedAt: Date = .now,
+        deviceID: String = SyncDeviceIdentity.current
+    ) {
+        self.id = id
+        self.recordName = recordName
+        self.entityTypeRaw = entityType.rawValue
+        self.deletedAt = deletedAt
+        self.deviceID = deviceID
+        self.isUploaded = false
+    }
+
+    var entityType: SyncEntityType {
+        SyncEntityType(rawValue: entityTypeRaw) ?? .bodyRecord
+    }
 }
 
-// Keep feature code independent of the active schema namespace. The current
-// store is V4; older namespaces remain available only to migration code.
-typealias WeightLossPlan = WorkoutSchemaV4.WeightLossPlan
-typealias DailyBodyRecord = WorkoutSchemaV4.DailyBodyRecord
-typealias DailyMealPlan = WorkoutSchemaV4.DailyMealPlan
-typealias DailyWorkoutPlan = WorkoutSchemaV4.DailyWorkoutPlan
-typealias SyncTombstone = WorkoutSchemaV4.SyncTombstone
-typealias CloudSyncState = WorkoutSchemaV4.CloudSyncState
+@Model
+final class CloudSyncState {
+    @Attribute(.unique) var id: String
+    var zoneChangeTokenData: Data?
+    var lastSuccessfulSyncAt: Date?
+    var lastAttemptAt: Date?
+    var lastErrorSummary: String?
+    var phaseRaw: String
+    var pendingRecordCount: Int
+    var pendingPhotoCount: Int
+
+    init(id: String = "primary") {
+        self.id = id
+        self.phaseRaw = CloudSyncPhase.disabled.rawValue
+        self.pendingRecordCount = 0
+        self.pendingPhotoCount = 0
+    }
+
+    var phase: CloudSyncPhase {
+        get { CloudSyncPhase(rawValue: phaseRaw) ?? .disabled }
+        set { phaseRaw = newValue.rawValue }
+    }
+}
+}

@@ -7,7 +7,7 @@ struct WorkoutApp: App {
     private let modelContainer: ModelContainer
 
     init() {
-        let schema = Schema(versionedSchema: WorkoutSchemaV3.self)
+        let schema = Schema(versionedSchema: WorkoutSchemaV4.self)
         let configuration = ModelConfiguration(schema: schema)
 
         do {

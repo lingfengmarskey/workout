@@ -33,6 +33,51 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutSchemaV3.PhotoSyncMetadata>()).isEmpty)
     }
 
+    func testMigratesShippedV3StoreToV4WithoutLosingRecords() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("workout-v4-migration-\(UUID().uuidString).store")
+        defer { removeStoreFiles(at: storeURL) }
+
+        let planID = UUID()
+        try autoreleasepool {
+            let schema = Schema(versionedSchema: WorkoutSchemaV3.self)
+            let configuration = ModelConfiguration("V4MigrationTest", schema: schema, url: storeURL)
+            let context = ModelContext(try ModelContainer(for: schema, configurations: [configuration]))
+            let plan = WorkoutSchemaV2.WeightLossPlan(
+                id: planID, name: "已发布 V3 计划", startDate: .now, durationDays: 7,
+                startWeight: 90, phaseTargetWeight: 88, finalTargetWeight: 80,
+                dailyCalorieTarget: 1_900, dailyProteinTarget: 140, dailyWaterTarget: 2.2
+            )
+            context.insert(plan)
+            let body = WorkoutSchemaV2.DailyBodyRecord(planID: planID, date: .now)
+            body.actualWeight = 89.4
+            body.frontPhotoHash = "front-hash"
+            context.insert(body)
+            context.insert(WorkoutSchemaV3.PhotoSyncMetadata(
+                bodyID: body.id, angle: .front, contentHash: "front-hash", updatedAt: .now, isDeleted: false
+            ))
+            try context.save()
+        }
+
+        let schema = Schema(versionedSchema: WorkoutSchemaV4.self)
+        let configuration = ModelConfiguration("V4MigrationTest", schema: schema, url: storeURL)
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: [configuration]
+        )
+        let context = ModelContext(container)
+
+        let plan = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutSchemaV4.WeightLossPlan>()).first)
+        let body = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutSchemaV4.DailyBodyRecord>()).first)
+        let metadata = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutSchemaV4.PhotoSyncMetadata>()).first)
+        XCTAssertEqual(plan.id, planID)
+        XCTAssertEqual(body.actualWeight, 89.4)
+        XCTAssertEqual(body.frontPhotoHash, "front-hash")
+        XCTAssertEqual(metadata.bodyID, body.id)
+        XCTAssertEqual(metadata.contentHash, "front-hash")
+    }
+
     func testMigratesV1StoreToV2WithoutLosingExistingRecords() throws {
         let storeURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("workout-migration-\(UUID().uuidString).store")
