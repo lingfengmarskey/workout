@@ -90,6 +90,14 @@ final class CloudSyncEngine {
         try context.save()
     }
 
+    func deleteCloudDataKeepingLocal(in context: ModelContext) async throws {
+        guard !isSyncing else { throw CloudSyncEngineError.busy }
+        isSyncing = true
+        defer { isSyncing = false }
+        try await CloudKitInfrastructureService.shared.deletePrivateZone()
+        try stopThisDevice(in: context)
+    }
+
     func syncState(in context: ModelContext) throws -> CloudSyncState {
         if let existing = try context.fetch(FetchDescriptor<CloudSyncState>()).first(where: { $0.id == "primary" }) {
             return existing
@@ -290,5 +298,13 @@ final class CloudSyncEngine {
             try context.save()
             return try await CloudKitTransport.shared.fetchZoneChanges(since: nil)
         }
+    }
+}
+
+enum CloudSyncEngineError: LocalizedError {
+    case busy
+
+    var errorDescription: String? {
+        switch self { case .busy: "同步正在进行，请稍后再试。" }
     }
 }

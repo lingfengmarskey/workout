@@ -9,6 +9,7 @@ struct CloudSyncSettingsView: View {
     @State private var errorMessage: String?
     @State private var showsEnableConfirmation = false
     @State private var showsStopConfirmation = false
+    @State private var showsDeleteCloudConfirmation = false
 
     var body: some View {
         Form {
@@ -57,6 +58,11 @@ struct CloudSyncSettingsView: View {
                         showsStopConfirmation = true
                     }
                     .disabled(isWorking)
+
+                    Button("删除 iCloud 中的减脂数据", role: .destructive) {
+                        showsDeleteCloudConfirmation = true
+                    }
+                    .disabled(isWorking)
                 } else {
                     Button("开启 iCloud 同步") {
                         showsEnableConfirmation = true
@@ -94,6 +100,12 @@ struct CloudSyncSettingsView: View {
             Button("停止同步", role: .destructive) { stopSync() }
         } message: {
             Text("本机记录和 iCloud 副本都会保留，其他设备不受影响。以后重新开启时会重新合并。")
+        }
+        .alert("删除 iCloud 数据？", isPresented: $showsDeleteCloudConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("删除云端数据", role: .destructive) { Task { await deleteCloudData() } }
+        } message: {
+            Text("这会删除本账号私有 CloudKit 中的减脂计划、记录和照片。本机数据会保留，但其他设备在下次同步前可能仍显示缓存。此操作不可撤销。")
         }
         .alert("iCloud 同步失败", isPresented: Binding(
             get: { errorMessage != nil },
@@ -162,6 +174,17 @@ struct CloudSyncSettingsView: View {
     private func stopSync() {
         do {
             try CloudSyncEngine.shared.stopThisDevice(in: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func deleteCloudData() async {
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await CloudSyncEngine.shared.deleteCloudDataKeepingLocal(in: modelContext)
         } catch {
             errorMessage = error.localizedDescription
         }

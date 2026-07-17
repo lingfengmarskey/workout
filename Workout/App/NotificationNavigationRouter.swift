@@ -1,5 +1,10 @@
 import SwiftUI
+import UIKit
 import UserNotifications
+
+extension Notification.Name {
+    static let cloudKitRemoteChange = Notification.Name("workout.cloudKitRemoteChange")
+}
 
 enum AppTab: Hashable {
     case today
@@ -89,5 +94,17 @@ final class WorkoutAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         } else {
             completionHandler()
         }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        NotificationCenter.default.post(name: .cloudKitRemoteChange, object: nil)
+        // The SwiftUI scene owns ModelContext and performs the actual sync.
+        // Do not claim new data here before that asynchronous work completes;
+        // the next foreground activation retries safely if iOS suspends us.
+        completionHandler(.noData)
     }
 }
