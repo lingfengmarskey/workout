@@ -37,6 +37,7 @@ struct CloudPhotoPayload {
 
 @MainActor
 enum CloudPhotoSyncService {
+    static let unversionedBaseline = Date.distantPast.addingTimeInterval(1)
     private struct Candidate {
         let bodyID: UUID
         let metadata: PhotoSyncMetadata
@@ -94,13 +95,13 @@ enum CloudPhotoSyncService {
                 _ = metadata.first(where: { $0.id == id }) ?? {
                     // V2 had no per-angle clock. Treat migrated content as an
                     // unversioned baseline so any real WLPhoto version wins.
-                    let created = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: .distantPast, isDeleted: hash == nil)
+                    let created = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: unversionedBaseline, isDeleted: hash == nil)
                     context.insert(created); metadata.append(created); return created
                 }()
             }
         }
         let bodyByID = Dictionary(uniqueKeysWithValues: try context.fetch(FetchDescriptor<DailyBodyRecord>()).map { ($0.id, $0) })
-        let candidates = metadata.filter { $0.updatedAt > cutoff }.map { item in
+        let candidates = metadata.filter { shouldUpload($0, changedSince: lastSync) }.map { item in
             Candidate(
                 bodyID: item.bodyID,
                 metadata: item,
@@ -136,6 +137,10 @@ enum CloudPhotoSyncService {
 
     static func recordName(bodyID: UUID, angle: CloudPhotoAngle) -> String {
         "wlphoto-\(bodyID.uuidString.lowercased())-\(angle.rawValue)"
+    }
+
+    static func shouldUpload(_ metadata: PhotoSyncMetadata, changedSince lastSync: Date?) -> Bool {
+        metadata.updatedAt > (lastSync ?? .distantPast)
     }
 
     static func stageLocalMutation(
@@ -194,7 +199,7 @@ enum CloudPhotoSyncService {
         let hash = expectedHash(for: angle, body: body)
         // Missing metadata means this is migrated V2 content with no reliable
         // photo clock. Never borrow the body-wide timestamp.
-        let item = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: .distantPast, isDeleted: hash == nil)
+        let item = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: unversionedBaseline, isDeleted: hash == nil)
         context.insert(item)
         return item
     }

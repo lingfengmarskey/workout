@@ -123,6 +123,16 @@ final class CloudPhotoSyncServiceTests: XCTestCase {
         XCTAssertEqual(try context.fetch(FetchDescriptor<PhotoSyncMetadata>()).first?.updatedAt, Date(timeIntervalSince1970: 200))
     }
 
+    func testLocalOnlyMigratedPhotoIsSelectedForInitialUpload() {
+        let metadata = PhotoSyncMetadata(
+            bodyID: UUID(), angle: .front, contentHash: "legacy-hash",
+            updatedAt: CloudPhotoSyncService.unversionedBaseline,
+            isDeleted: false
+        )
+        XCTAssertTrue(CloudPhotoSyncService.shouldUpload(metadata, changedSince: nil))
+        XCTAssertFalse(CloudPhotoSyncService.shouldUpload(metadata, changedSince: Date.now))
+    }
+
     func testNewerServerDeletionClearsPathHashAndProtectedFile() throws {
         let context = try makeContext()
         let data = try XCTUnwrap(UIImage(systemName: "person.fill")?.pngData())
