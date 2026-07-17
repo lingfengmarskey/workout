@@ -3,6 +3,7 @@ import SwiftData
 import UIKit
 
 struct ReminderSettingsView: View {
+    @AppStorage(CurrentPlanSelection.storageKey) private var currentPlanID = ""
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -15,7 +16,7 @@ struct ReminderSettingsView: View {
             permissionSection
             if activePlan == nil {
                 Section {
-                    Label("没有进行中的计划，提醒不会被调度。设置会保存在本机，创建或恢复计划后自动生效。", systemImage: "pause.circle")
+                    Label("没有选择当前计划，提醒不会被调度。请在计划库中选择一个进行中的计划。", systemImage: "pause.circle")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -58,7 +59,7 @@ struct ReminderSettingsView: View {
     }
 
     private var activePlan: WeightLossPlan? {
-        plans.first(where: { $0.status == .active })
+        CurrentPlanSelection.resolve(from: plans, storedID: currentPlanID)
     }
 
     private var permissionSection: some View {

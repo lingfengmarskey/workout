@@ -6,7 +6,6 @@ struct PlanHistoryDetailView: View {
     let plan: WeightLossPlan
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query private var plans: [WeightLossPlan]
     @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
     @Query private var mealPlans: [DailyMealPlan]
     @Query private var workoutPlans: [DailyWorkoutPlan]
@@ -54,7 +53,7 @@ struct PlanHistoryDetailView: View {
                         Label("重新开启这个计划", systemImage: "figure.run.circle.fill")
                     }
                 } footer: {
-                    Text("重新开启必须由你确认，并且同一时间只能有一个进行中的计划。")
+                    Text("重新开启必须由你确认。它可以与其他进行中的计划并存，确认后会设为本机当前使用计划。")
                 }
             }
 
@@ -175,11 +174,7 @@ struct PlanHistoryDetailView: View {
     }
 
     private func requestResume() {
-        if let active = plans.first(where: { $0.status == .active && $0.id != plan.id }) {
-            errorMessage = "“\(active.name)”正在进行中。请先由你手动暂停、完成或放弃该计划。"
-        } else {
-            showResumeConfirmation = true
-        }
+        showResumeConfirmation = true
     }
 
     private func resumePlan() {
@@ -188,6 +183,7 @@ struct PlanHistoryDetailView: View {
         plan.syncRevision += 1
         do {
             try modelContext.save()
+            CurrentPlanSelection.select(plan)
             feedback = PlanStatusFeedback(status: .active, planName: plan.name)
         } catch {
             modelContext.rollback()

@@ -39,6 +39,7 @@ private struct BootstrapView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
     @AppStorage(AppLockSettings.enabledKey) private var isAppLockEnabled = false
+    @AppStorage(CurrentPlanSelection.storageKey) private var currentPlanID = ""
     @State private var didAttemptSeed = false
     @State private var isUnlocked = false
     @State private var isAuthenticating = false
@@ -124,7 +125,7 @@ private struct BootstrapView: View {
     }
 
     private var activePlanID: UUID? {
-        plans.first(where: { $0.status == .active })?.id
+        CurrentPlanSelection.resolve(from: plans, storedID: currentPlanID)?.id
     }
 
     @MainActor

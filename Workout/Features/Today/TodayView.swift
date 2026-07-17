@@ -7,6 +7,7 @@ struct TodayView: View {
     @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
+    @AppStorage(CurrentPlanSelection.storageKey) private var currentPlanID = ""
 
     private let calendar = Calendar.current
 
@@ -51,9 +52,11 @@ struct TodayView: View {
                 .navigationTitle("今天")
             } else {
                 ContentUnavailableView(
-                    "没有进行中的计划",
+                    plans.contains(where: { $0.status == .active }) ? "请选择当前计划" : "没有进行中的计划",
                     systemImage: "pause.circle",
-                    description: Text("请在“设置”中创建新计划，或恢复一个已暂停的计划。")
+                    description: Text(plans.contains(where: { $0.status == .active })
+                        ? "请在“设置”的计划库中选择要使用的进行中计划。"
+                        : "请在“设置”中创建新计划，或恢复一个已暂停的计划。")
                 )
                 .navigationTitle("今天")
             }
@@ -94,7 +97,10 @@ struct TodayView: View {
                 }
             }
         } else {
-            missingTodayRecord("没有进行中的计划", systemImage: "pause.circle")
+            missingTodayRecord(
+                plans.contains(where: { $0.status == .active }) ? "请选择当前计划" : "没有进行中的计划",
+                systemImage: "pause.circle"
+            )
         }
     }
 
@@ -103,7 +109,7 @@ struct TodayView: View {
     }
 
     private var activePlan: WeightLossPlan? {
-        plans.first(where: { $0.status == .active })
+        CurrentPlanSelection.resolve(from: plans, storedID: currentPlanID)
     }
 
     private func todayBodyRecord(for plan: WeightLossPlan) -> DailyBodyRecord? {
