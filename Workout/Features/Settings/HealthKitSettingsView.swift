@@ -2,9 +2,11 @@ import SwiftUI
 
 struct HealthKitSettingsView: View {
     @AppStorage("healthkit.steps.authorizationRequested") private var authorizationRequested = false
+    @AppStorage("healthkit.weight.authorizationRequested") private var weightAuthorizationRequested = false
     @State private var isLoading = false
     @State private var todaySteps: Int?
     @State private var errorMessage: String?
+    @State private var latestWeight: Double?
 
     var body: some View {
         Form {
@@ -31,8 +33,25 @@ struct HealthKitSettingsView: View {
                 }
             }
 
+            Section("体重读取与写入") {
+                LabeledContent("权限请求", value: weightAuthorizationRequested ? "已请求" : "尚未请求")
+                Button {
+                    Task { await connectWeight() }
+                } label: {
+                    Label("连接并读取今日体重", systemImage: "scalemass")
+                }
+                .disabled(isLoading || !HealthKitWeightService.isAvailable)
+
+                if let latestWeight {
+                    LabeledContent(
+                        "今日最近体重",
+                        value: "\(latestWeight.formatted(.number.precision(.fractionLength(1)))) kg"
+                    )
+                }
+            }
+
             Section {
-                Text("App 只请求读取步数，不会写入健康数据，也不会读取体重或其他健康信息。读取权限由健康 App 管理；即使拒绝授权，你仍然可以手动记录步数。")
+                Text("步数仅用于读取。体重会申请读取与写入权限，但只有你在身体记录页明确确认后才会保存到健康 App。权限由健康 App 管理；即使拒绝授权，手动记录仍然可用。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -45,6 +64,18 @@ struct HealthKitSettingsView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+    }
+
+    private func connectWeight() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            try await HealthKitWeightService.requestAuthorization()
+            weightAuthorizationRequested = true
+            latestWeight = try await HealthKitWeightService.latestWeight(on: .now)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
