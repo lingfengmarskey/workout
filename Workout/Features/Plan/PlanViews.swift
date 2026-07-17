@@ -474,6 +474,10 @@ private struct ActualFoodEntryEditorView: View {
             validationMessage = "每基准量能量必须是 0 或更大的数字。"
             return
         }
+        guard [protein, carbohydrates, fat].allSatisfy(isValidOptionalNumber) else {
+            validationMessage = "蛋白质、碳水和脂肪必须是 0 或更大的数字，或留空。"
+            return
+        }
 
         let result = ActualFoodEntry(
             id: entry?.id ?? UUID(),
@@ -508,6 +512,11 @@ private struct ActualFoodEntryEditorView: View {
     private func parseOptionalNonNegative(_ text: String) -> Double? {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return parseNonNegative(text)
+    }
+
+    private func isValidOptionalNumber(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || parseNonNegative(trimmed) != nil
     }
 }
 
