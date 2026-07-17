@@ -57,6 +57,7 @@ struct PlanStatusFeedbackView: View {
 
     private var title: String {
         switch feedback.status {
+        case .active: "重新出发！"
         case .completed: "太棒了，计划完成！"
         case .paused: "计划已暂停"
         case .abandoned: "这段计划已结束"
@@ -66,6 +67,7 @@ struct PlanStatusFeedbackView: View {
 
     private var message: String {
         switch feedback.status {
+        case .active: "计划已经重新开启。按自己的节奏，继续向前。"
         case .completed: "每一天的坚持都算数。你的记录和成果已经完整保存。"
         case .paused: "休息不是退步。所有记录都已保存，准备好时可以再次出发。"
         case .abandoned: "有些计划会改变，但你的努力不会消失。历史记录会一直保留。"
@@ -75,6 +77,7 @@ struct PlanStatusFeedbackView: View {
 
     private var icon: String {
         switch feedback.status {
+        case .active: "figure.run.circle.fill"
         case .completed: "trophy.fill"
         case .paused: "pause.circle.fill"
         case .abandoned: "cloud.rain.fill"
@@ -84,6 +87,7 @@ struct PlanStatusFeedbackView: View {
 
     private var colors: [Color] {
         switch feedback.status {
+        case .active: [.green.opacity(0.35), .mint.opacity(0.2), Color(uiColor: .systemBackground)]
         case .completed: [.yellow.opacity(0.75), .orange.opacity(0.35), Color(uiColor: .systemBackground)]
         case .paused: [.blue.opacity(0.28), Color(uiColor: .systemBackground)]
         case .abandoned: [.gray.opacity(0.4), .blue.opacity(0.15), Color(uiColor: .systemBackground)]
