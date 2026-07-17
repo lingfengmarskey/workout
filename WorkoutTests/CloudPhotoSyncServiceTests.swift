@@ -238,7 +238,7 @@ final class CloudPhotoSyncServiceTests: XCTestCase {
     }
 
     private func makeContext() throws -> ModelContext {
-        let schema = Schema(versionedSchema: WorkoutSchemaV3.self)
+        let schema = Schema(versionedSchema: WorkoutSchemaV4.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         return try ModelContext(ModelContainer(for: schema, configurations: [configuration]))
     }
