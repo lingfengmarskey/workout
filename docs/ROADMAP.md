@@ -95,8 +95,10 @@
 - [x] HealthKit 体重读取和写入
 - [x] CSV 导出
 - [x] Face ID / 设备密码可选隐私锁（默认关闭）
-- [ ] iCloud / CloudKit 同步
+- [ ] iCloud / CloudKit 同步（按 `ICLOUD-SYNC-DESIGN.md` 分阶段实施）
 - [ ] Widget
+
+iCloud 同步采用本地 SwiftData 为主存储、自定义 CloudKit Private Database 为同步层。不得直接开启自动镜像造成照片与记录分离。详细架构、冲突、删除和验收策略见 [iCloud / CloudKit 同步设计](ICLOUD-SYNC-DESIGN.md)。
 
 ## 暂不开发
 
