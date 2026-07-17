@@ -9,7 +9,6 @@ struct ProgressDashboardView: View {
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
     @State private var showFullScreenWeightChart = false
     @State private var showFullScreenWaistChart = false
-    @State private var hasScheduledChartLoading = false
     @State private var showWeightChart = false
     @State private var showWaistChart = false
     @State private var weightDrawingProgress = 0.0
@@ -269,31 +268,47 @@ struct ProgressDashboardView: View {
 
     @MainActor
     private func loadChartsAfterFirstFrame() async {
-        guard !hasScheduledChartLoading else { return }
-        hasScheduledChartLoading = true
-
-        try? await Task.sleep(for: .milliseconds(120))
-        guard !Task.isCancelled else { return }
-        withAnimation(.easeOut(duration: 0.2)) { showWeightChart = true }
-        await Task.yield()
-        for step in 1...40 {
-            guard !Task.isCancelled else { return }
-            withAnimation(.linear(duration: 0.035)) {
-                weightDrawingProgress = Double(step) / 40
-            }
-            try? await Task.sleep(for: .milliseconds(22))
+        if !showWeightChart {
+            guard await pauseUnlessCancelled(for: .milliseconds(120)) else { return }
+            withAnimation(.easeOut(duration: 0.2)) { showWeightChart = true }
+            await Task.yield()
         }
 
-        try? await Task.sleep(for: .milliseconds(140))
-        guard !Task.isCancelled else { return }
-        withAnimation(.easeOut(duration: 0.2)) { showWaistChart = true }
-        await Task.yield()
-        for step in 1...32 {
-            guard !Task.isCancelled else { return }
-            withAnimation(.linear(duration: 0.035)) {
-                waistDrawingProgress = Double(step) / 32
+        if weightDrawingProgress < 1 {
+            let firstStep = max(1, Int(floor(weightDrawingProgress * 40)) + 1)
+            for step in firstStep...40 {
+                guard !Task.isCancelled else { return }
+                withAnimation(.linear(duration: 0.035)) {
+                    weightDrawingProgress = Double(step) / 40
+                }
+                guard await pauseUnlessCancelled(for: .milliseconds(22)) else { return }
             }
-            try? await Task.sleep(for: .milliseconds(22))
+        }
+
+        if !showWaistChart {
+            guard await pauseUnlessCancelled(for: .milliseconds(140)) else { return }
+            withAnimation(.easeOut(duration: 0.2)) { showWaistChart = true }
+            await Task.yield()
+        }
+
+        if waistDrawingProgress < 1 {
+            let firstStep = max(1, Int(floor(waistDrawingProgress * 32)) + 1)
+            for step in firstStep...32 {
+                guard !Task.isCancelled else { return }
+                withAnimation(.linear(duration: 0.035)) {
+                    waistDrawingProgress = Double(step) / 32
+                }
+                guard await pauseUnlessCancelled(for: .milliseconds(22)) else { return }
+            }
+        }
+    }
+
+    private func pauseUnlessCancelled(for duration: Duration) async -> Bool {
+        do {
+            try await Task.sleep(for: duration)
+            return !Task.isCancelled
+        } catch {
+            return false
         }
     }
 
