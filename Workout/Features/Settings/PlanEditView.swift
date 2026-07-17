@@ -96,6 +96,8 @@ struct PlanEditView: View {
             $0.plannedCalories = dailyCalories
             $0.plannedProtein = dailyProtein
             $0.waterTarget = dailyWater
+            $0.updatedAt = .now
+            $0.syncRevision += 1
         }
         dismiss()
     }

@@ -121,6 +121,15 @@ struct WeeklyReviewDetailView: View {
             futureWorkouts.forEach { $0.plannedDurationMinutes = max(10, $0.plannedDurationMinutes - 10) }
         }
         plan.updatedAt = .now
+        plan.syncRevision += 1
+        futureMeals.forEach {
+            $0.updatedAt = .now
+            $0.syncRevision += 1
+        }
+        futureWorkouts.forEach {
+            $0.updatedAt = .now
+            $0.syncRevision += 1
+        }
         proposedAdjustment = nil
     }
 }

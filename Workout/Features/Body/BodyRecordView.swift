@@ -1,9 +1,11 @@
 import AVFoundation
 import PhotosUI
+import SwiftData
 import SwiftUI
 import UIKit
 
 struct BodyRecordView: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Bindable var record: DailyBodyRecord
     let plan: WeightLossPlan
@@ -18,6 +20,7 @@ struct BodyRecordView: View {
     @State private var showOverwriteWeightConfirmation = false
     @State private var showWriteWeightConfirmation = false
     @State private var healthWeightMessage: String?
+    @State private var initialSyncFingerprint: String?
 
     var body: some View {
         Form {
@@ -94,9 +97,12 @@ struct BodyRecordView: View {
         }
         .navigationTitle(record.date.formatted(date: .abbreviated, time: .omitted))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { initialSyncFingerprint = syncFingerprint }
         .onDisappear {
-            record.updatedAt = .now
-            record.syncRevision += 1
+            if initialSyncFingerprint != syncFingerprint {
+                record.updatedAt = .now
+                record.syncRevision += 1
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, pendingCameraAngle != nil else { return }
@@ -306,24 +312,41 @@ struct BodyRecordView: View {
     }
 
     private func save(_ data: Data, for angle: BodyPhotoAngle) throws {
-        let identifier = try BodyPhotoStore.shared.save(
-            imageData: data,
-            replacing: photoIdentifier(for: angle)
-        )
+        let oldIdentifier = photoIdentifier(for: angle)
+        let oldHash = photoHash(for: angle)
+        let identifier = try BodyPhotoStore.shared.save(imageData: data)
         setPhotoIdentifier(identifier, for: angle)
         setPhotoHash(BodyPhotoStore.shared.contentHash(for: identifier), for: angle)
         record.updatedAt = .now
         record.syncRevision += 1
+        do {
+            try modelContext.save()
+            try? BodyPhotoStore.shared.delete(identifier: oldIdentifier)
+            initialSyncFingerprint = syncFingerprint
+        } catch {
+            setPhotoIdentifier(oldIdentifier, for: angle)
+            setPhotoHash(oldHash, for: angle)
+            try? BodyPhotoStore.shared.delete(identifier: identifier)
+            modelContext.rollback()
+            throw error
+        }
     }
 
     private func deletePhoto(for angle: BodyPhotoAngle) {
+        let oldIdentifier = photoIdentifier(for: angle)
+        let oldHash = photoHash(for: angle)
         do {
-            try BodyPhotoStore.shared.delete(identifier: photoIdentifier(for: angle))
             setPhotoIdentifier(nil, for: angle)
             setPhotoHash(nil, for: angle)
             record.updatedAt = .now
             record.syncRevision += 1
+            try modelContext.save()
+            try? BodyPhotoStore.shared.delete(identifier: oldIdentifier)
+            initialSyncFingerprint = syncFingerprint
         } catch {
+            setPhotoIdentifier(oldIdentifier, for: angle)
+            setPhotoHash(oldHash, for: angle)
+            modelContext.rollback()
             errorMessage = readableMessage(for: error)
         }
     }
@@ -384,12 +407,36 @@ struct BodyRecordView: View {
         }
     }
 
+    private func photoHash(for angle: BodyPhotoAngle) -> String? {
+        switch angle {
+        case .front: record.frontPhotoHash
+        case .side: record.sidePhotoHash
+        case .back: record.backPhotoHash
+        }
+    }
+
     private func setPhotoHash(_ hash: String?, for angle: BodyPhotoAngle) {
         switch angle {
         case .front: record.frontPhotoHash = hash
         case .side: record.sidePhotoHash = hash
         case .back: record.backPhotoHash = hash
         }
+    }
+
+    private var syncFingerprint: String {
+        [
+            record.actualWeight.map { String($0) } ?? "",
+            record.waist.map { String($0) } ?? "",
+            record.sleepHours.map { String($0) } ?? "",
+            record.morningEnergy.map { String($0) } ?? "",
+            record.frontPhotoPath ?? "",
+            record.sidePhotoPath ?? "",
+            record.backPhotoPath ?? "",
+            record.frontPhotoHash ?? "",
+            record.sidePhotoHash ?? "",
+            record.backPhotoHash ?? "",
+            record.note
+        ].joined(separator: "|")
     }
 
     private func readableMessage(for error: Error) -> String {

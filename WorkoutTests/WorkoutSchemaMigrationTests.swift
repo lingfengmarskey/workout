@@ -27,8 +27,13 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
                 dailyProteinTarget: 140,
                 dailyWaterTarget: 2.2
             ))
-            context.insert(WorkoutSchemaV1.DailyBodyRecord(planID: planID, date: .now))
-            context.insert(WorkoutSchemaV1.DailyMealPlan(
+            let body = WorkoutSchemaV1.DailyBodyRecord(planID: planID, date: .now)
+            body.actualWeight = 94.6
+            body.waist = 101.2
+            body.frontPhotoPath = "existing-front.jpg"
+            body.note = "迁移后应保留"
+            context.insert(body)
+            let meal = WorkoutSchemaV1.DailyMealPlan(
                 planID: planID,
                 date: .now,
                 breakfast: "早餐",
@@ -38,8 +43,11 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
                 plannedCalories: 1_900,
                 plannedProtein: 140,
                 waterTarget: 2.2
-            ))
-            context.insert(WorkoutSchemaV1.DailyWorkoutPlan(
+            )
+            meal.breakfastStatus = .completed
+            meal.actualWater = 1.8
+            context.insert(meal)
+            let workout = WorkoutSchemaV1.DailyWorkoutPlan(
                 planID: planID,
                 date: .now,
                 workoutType: "快走",
@@ -50,7 +58,10 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
                 plannedDurationMinutes: 45,
                 targetSteps: 8_000,
                 intensityDescription: "中等"
-            ))
+            )
+            workout.status = .partial
+            workout.actualSteps = 7_654
+            context.insert(workout)
             try context.save()
         }
 
@@ -73,7 +84,15 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
         XCTAssertEqual(meals.count, 1)
         XCTAssertEqual(workouts.count, 1)
         XCTAssertEqual(plans.first?.syncRevision, 0)
+        XCTAssertEqual(bodies.first?.actualWeight, 94.6)
+        XCTAssertEqual(bodies.first?.waist, 101.2)
+        XCTAssertEqual(bodies.first?.frontPhotoPath, "existing-front.jpg")
+        XCTAssertEqual(bodies.first?.note, "迁移后应保留")
         XCTAssertEqual(meals.first?.syncRevision, 0)
+        XCTAssertEqual(meals.first?.breakfastStatus, .completed)
+        XCTAssertEqual(meals.first?.actualWater, 1.8)
+        XCTAssertEqual(workouts.first?.status, .partial)
+        XCTAssertEqual(workouts.first?.actualSteps, 7_654)
         XCTAssertNotNil(meals.first?.updatedAt)
         XCTAssertNotNil(workouts.first?.updatedAt)
         XCTAssertNil(bodies.first?.frontPhotoHash)

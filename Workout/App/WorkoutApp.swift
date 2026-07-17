@@ -108,6 +108,7 @@ private struct BootstrapView: View {
 
                 do {
                     try SeedData.seedIfNeeded(in: modelContext)
+                    try PhotoHashBackfillService.runIfNeeded(in: modelContext)
                 } catch {
                     assertionFailure("Failed to seed initial data: \(error)")
                 }
