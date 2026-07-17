@@ -165,7 +165,10 @@ enum CloudPhotoSyncService {
 
     private static func inferredMetadata(body: DailyBodyRecord, angle: CloudPhotoAngle, context: ModelContext) -> PhotoSyncMetadata {
         let hash = expectedHash(for: angle, body: body)
-        let item = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: body.updatedAt, isDeleted: hash == nil)
+        // With no local photo there is no local deletion intent to compete
+        // with an authoritative WLPhoto arriving during first sync.
+        let inferredDate = hash == nil ? Date.distantPast : body.updatedAt
+        let item = PhotoSyncMetadata(bodyID: body.id, angle: angle, contentHash: hash, updatedAt: inferredDate, isDeleted: hash == nil)
         context.insert(item)
         return item
     }
