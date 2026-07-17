@@ -40,8 +40,7 @@ final class CloudSyncEngine {
         try context.save()
 
         do {
-            let previousToken = try CloudChangeTokenStore.decode(state.zoneChangeTokenData)
-            let batch = try await CloudKitTransport.shared.fetchZoneChanges(since: previousToken)
+            let batch = try await fetchChangesRecoveringExpiredToken(state: state, context: context)
             _ = try CloudRecordMergeService.apply(
                 changedRecords: batch.changedRecords,
                 deletedRecords: batch.deletedRecords,
@@ -136,7 +135,8 @@ final class CloudSyncEngine {
             let localIdentity = try CloudPayloadIdentity(record: local)
             let serverIdentity = try CloudPayloadIdentity(record: server)
             if localIdentity.updatedAt == serverIdentity.updatedAt,
-               localIdentity.syncRevision == serverIdentity.syncRevision {
+               localIdentity.syncRevision == serverIdentity.syncRevision,
+               localIdentity.deviceID == serverIdentity.deviceID {
                 continue
             }
             if Self.prefersLocal(localIdentity, over: serverIdentity) {
@@ -241,5 +241,19 @@ final class CloudSyncEngine {
 
     private static func isUnknownItem(_ error: Error) -> Bool {
         (error as? CKError)?.code == .unknownItem
+    }
+
+    private func fetchChangesRecoveringExpiredToken(
+        state: CloudSyncState,
+        context: ModelContext
+    ) async throws -> CloudZoneChangeBatch {
+        let token = try CloudChangeTokenStore.decode(state.zoneChangeTokenData)
+        do {
+            return try await CloudKitTransport.shared.fetchZoneChanges(since: token)
+        } catch let error as CKError where error.code == .changeTokenExpired {
+            state.zoneChangeTokenData = nil
+            try context.save()
+            return try await CloudKitTransport.shared.fetchZoneChanges(since: nil)
+        }
     }
 }

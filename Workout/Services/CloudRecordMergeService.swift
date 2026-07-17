@@ -17,13 +17,19 @@ enum CloudRecordMergeService {
         in context: ModelContext
     ) throws -> CloudMergeSummary {
         var summary = CloudMergeSummary()
+        var photoIdentifiersToDelete: [String] = []
 
         // Tombstones are applied first so a stale changed record in the same
         // CloudKit batch cannot resurrect an object deleted on another device.
         let payloads = try changedRecords.map { try CloudRecordPayload.decode($0) }
         for payload in payloads {
             if case let .tombstone(tombstone) = payload {
-                if try delete(recordName: tombstone.recordName, entityType: tombstone.entityType, in: context) {
+                if try delete(
+                    recordName: tombstone.recordName,
+                    entityType: tombstone.entityType,
+                    in: context,
+                    photoIdentifiersToDelete: &photoIdentifiersToDelete
+                ) {
                     summary.deleted += 1
                 } else {
                     summary.ignored += 1
@@ -53,12 +59,23 @@ enum CloudRecordMergeService {
 
         for deletion in deletedRecords {
             guard let entityType = SyncEntityType(recordType: deletion.recordType) else { continue }
-            if try delete(recordName: deletion.recordID.recordName, entityType: entityType, in: context) {
+            if try delete(
+                recordName: deletion.recordID.recordName,
+                entityType: entityType,
+                in: context,
+                photoIdentifiersToDelete: &photoIdentifiersToDelete
+            ) {
                 summary.deleted += 1
             }
         }
 
         try context.save()
+        // Database state is authoritative. Remove files only after its deletion
+        // commits so a failed save can never leave a live record pointing at a
+        // file that was already destroyed.
+        for identifier in photoIdentifiersToDelete {
+            try? BodyPhotoStore.shared.delete(identifier: identifier)
+        }
         return summary
     }
 
@@ -222,7 +239,12 @@ enum CloudRecordMergeService {
     }
 
     @discardableResult
-    private static func delete(recordName: String, entityType: SyncEntityType, in context: ModelContext) throws -> Bool {
+    private static func delete(
+        recordName: String,
+        entityType: SyncEntityType,
+        in context: ModelContext,
+        photoIdentifiersToDelete: inout [String]
+    ) throws -> Bool {
         guard let id = UUID(uuidString: String(recordName.suffix(36))) else { return false }
         switch entityType {
         case .plan:
@@ -230,7 +252,7 @@ enum CloudRecordMergeService {
             context.delete(model)
         case .bodyRecord:
             guard let model = try context.fetch(FetchDescriptor<DailyBodyRecord>()).first(where: { $0.id == id }) else { return false }
-            try BodyPhotoStore.shared.deletePhotos(for: model)
+            photoIdentifiersToDelete += [model.frontPhotoPath, model.sidePhotoPath, model.backPhotoPath].compactMap { $0 }
             context.delete(model)
         case .mealPlan:
             guard let model = try context.fetch(FetchDescriptor<DailyMealPlan>()).first(where: { $0.id == id }) else { return false }
