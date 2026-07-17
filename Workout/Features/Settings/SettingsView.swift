@@ -206,8 +206,6 @@ struct SettingsView: View {
     private func makeCompletionSummary(for plan: WeightLossPlan) -> PlanCompletionSummary {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: .now)
-        let elapsed = calendar.dateComponents([.day], from: plan.startDate, to: today).day ?? 0
-        let executedDays = min(plan.durationDays, max(0, elapsed + 1))
         let planBodyRecords = bodyRecords.filter { $0.planID == plan.id }
         let latestWeight = planBodyRecords.last(where: { $0.actualWeight != nil })?.actualWeight
         let planMeals = mealPlans.filter { $0.planID == plan.id && $0.date <= today }
@@ -216,6 +214,10 @@ struct SettingsView: View {
         }.map(completionScore)
         let planWorkouts = workoutPlans.filter { $0.planID == plan.id && $0.date <= today }
         let workoutScores = planWorkouts.map { completionScore($0.status) }
+        let bodyActivityDates = planBodyRecords.filter(hasBodyActivity).map { calendar.startOfDay(for: $0.date) }
+        let mealActivityDates = planMeals.filter(hasMealActivity).map { calendar.startOfDay(for: $0.date) }
+        let workoutActivityDates = planWorkouts.filter(hasWorkoutActivity).map { calendar.startOfDay(for: $0.date) }
+        let executedDays = Set(bodyActivityDates + mealActivityDates + workoutActivityDates).count
 
         return PlanCompletionSummary(
             executedDays: executedDays,
@@ -237,6 +239,23 @@ struct SettingsView: View {
     private func average(_ values: [Double]) -> Double? {
         guard !values.isEmpty else { return nil }
         return values.reduce(0, +) / Double(values.count)
+    }
+
+    private func hasBodyActivity(_ record: DailyBodyRecord) -> Bool {
+        record.actualWeight != nil || record.waist != nil || record.sleepHours != nil
+            || record.morningEnergy != nil || !record.note.isEmpty
+            || record.frontPhotoPath != nil || record.sidePhotoPath != nil || record.backPhotoPath != nil
+    }
+
+    private func hasMealActivity(_ plan: DailyMealPlan) -> Bool {
+        [plan.breakfastStatus, plan.lunchStatus, plan.dinnerStatus, plan.snackStatus]
+            .contains { $0 != .notRecorded }
+            || plan.hungerLevel != nil || plan.actualWater != nil || !plan.note.isEmpty
+    }
+
+    private func hasWorkoutActivity(_ plan: DailyWorkoutPlan) -> Bool {
+        plan.status != .notRecorded || plan.actualDurationMinutes != nil || plan.actualSteps != nil
+            || plan.fatigueLevel != nil || !plan.painDescription.isEmpty || !plan.note.isEmpty
     }
 
 #if DEBUG

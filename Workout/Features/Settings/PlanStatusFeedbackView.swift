@@ -27,14 +27,9 @@ struct PlanStatusFeedbackView: View {
                 .ignoresSafeArea()
 
             if feedback.status == .completed && !reduceMotion {
-                ForEach(0..<18, id: \.self) { index in
-                    Circle()
-                        .fill(index.isMultiple(of: 2) ? .yellow : .white)
-                        .frame(width: 8, height: 8)
-                        .offset(x: isVisible ? CGFloat((index % 6) - 3) * 52 : 0,
-                                y: isVisible ? CGFloat((index / 6) - 1) * 150 : 0)
-                        .opacity(isVisible ? 0.75 : 0)
-                }
+                CelebrationFireworksView()
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
             }
 
             ScrollView {
@@ -49,7 +44,7 @@ struct PlanStatusFeedbackView: View {
                     Text(feedback.planName).font(.title3.weight(.semibold))
                     Text(message)
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(feedback.status == .completed ? Color.white.opacity(0.82) : Color.secondary)
                 }
 
                 if let summary = feedback.completionSummary, feedback.status == .completed {
@@ -61,6 +56,7 @@ struct PlanStatusFeedbackView: View {
                     .controlSize(.large)
             }
             .padding(32)
+            .foregroundStyle(feedback.status == .completed ? Color.white : Color.primary)
             }
         }
         .onAppear {
@@ -79,7 +75,7 @@ struct PlanStatusFeedbackView: View {
             HStack(spacing: 12) {
                 if let latest = summary.latestWeight {
                     achievementMetric("最后体重", weight(latest))
-                    achievementMetric("累计变化", signedWeight(latest - summary.startWeight))
+                    achievementMetric("累计减重", signedWeight(summary.startWeight - latest))
                 }
             }
             HStack(spacing: 12) {
@@ -97,7 +93,9 @@ struct PlanStatusFeedbackView: View {
 
     private func achievementMetric(_ title: String, _ value: String) -> some View {
         VStack(spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(feedback.status == .completed ? Color.white.opacity(0.75) : Color.secondary)
             Text(value).font(.title3.bold()).monospacedDigit()
         }
         .frame(maxWidth: .infinity)
@@ -145,7 +143,7 @@ struct PlanStatusFeedbackView: View {
     private var colors: [Color] {
         switch feedback.status {
         case .active: [.green.opacity(0.35), .mint.opacity(0.2), Color(uiColor: .systemBackground)]
-        case .completed: [.yellow.opacity(0.75), .orange.opacity(0.35), Color(uiColor: .systemBackground)]
+        case .completed: [Color(red: 0.03, green: 0.05, blue: 0.16), Color(red: 0.15, green: 0.06, blue: 0.28)]
         case .paused: [.blue.opacity(0.28), Color(uiColor: .systemBackground)]
         case .abandoned: [.gray.opacity(0.4), .blue.opacity(0.15), Color(uiColor: .systemBackground)]
         default: [.green.opacity(0.25), Color(uiColor: .systemBackground)]
