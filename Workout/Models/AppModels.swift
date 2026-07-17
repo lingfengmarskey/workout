@@ -41,6 +41,7 @@ enum CompletionStatus: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+extension WorkoutSchemaV1 {
 @Model
 final class WeightLossPlan {
     @Attribute(.unique) var id: UUID
@@ -264,3 +265,11 @@ final class DailyWorkoutPlan {
         set { statusRaw = newValue.rawValue }
     }
 }
+}
+
+// Keep feature code independent of the active schema namespace. When V2 is
+// introduced, these aliases move to its model types without changing callers.
+typealias WeightLossPlan = WorkoutSchemaV1.WeightLossPlan
+typealias DailyBodyRecord = WorkoutSchemaV1.DailyBodyRecord
+typealias DailyMealPlan = WorkoutSchemaV1.DailyMealPlan
+typealias DailyWorkoutPlan = WorkoutSchemaV1.DailyWorkoutPlan

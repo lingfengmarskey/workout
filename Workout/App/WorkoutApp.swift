@@ -3,18 +3,28 @@ import SwiftUI
 
 @main
 struct WorkoutApp: App {
+    private let modelContainer: ModelContainer
+
+    init() {
+        let schema = Schema(versionedSchema: WorkoutSchemaV1.self)
+        let configuration = ModelConfiguration(schema: schema)
+
+        do {
+            modelContainer = try ModelContainer(
+                for: schema,
+                migrationPlan: WorkoutMigrationPlan.self,
+                configurations: [configuration]
+            )
+        } catch {
+            fatalError("Unable to initialize the local data store: \(error)")
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             BootstrapView()
         }
-        .modelContainer(
-            for: [
-                WeightLossPlan.self,
-                DailyBodyRecord.self,
-                DailyMealPlan.self,
-                DailyWorkoutPlan.self
-            ]
-        )
+        .modelContainer(modelContainer)
     }
 }
 
