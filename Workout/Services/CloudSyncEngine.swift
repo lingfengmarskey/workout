@@ -91,6 +91,9 @@ final class CloudSyncEngine {
     }
 
     func deleteCloudDataKeepingLocal(in context: ModelContext) async throws {
+        guard !isSyncing else { throw CloudSyncEngineError.busy }
+        isSyncing = true
+        defer { isSyncing = false }
         try await CloudKitInfrastructureService.shared.deletePrivateZone()
         try stopThisDevice(in: context)
     }
@@ -295,5 +298,13 @@ final class CloudSyncEngine {
             try context.save()
             return try await CloudKitTransport.shared.fetchZoneChanges(since: nil)
         }
+    }
+}
+
+enum CloudSyncEngineError: LocalizedError {
+    case busy
+
+    var errorDescription: String? {
+        switch self { case .busy: "同步正在进行，请稍后再试。" }
     }
 }

@@ -102,6 +102,9 @@ final class WorkoutAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
         NotificationCenter.default.post(name: .cloudKitRemoteChange, object: nil)
-        completionHandler(.newData)
+        // The SwiftUI scene owns ModelContext and performs the actual sync.
+        // Do not claim new data here before that asynchronous work completes;
+        // the next foreground activation retries safely if iOS suspends us.
+        completionHandler(.noData)
     }
 }
