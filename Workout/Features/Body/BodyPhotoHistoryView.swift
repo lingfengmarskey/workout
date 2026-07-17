@@ -105,14 +105,6 @@ struct BodyPhotoComparisonView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal)
 
-            Picker("对比风格", selection: $comparisonStyle) {
-                ForEach(BodyPhotoComparisonStyle.allCases) { style in
-                    Label(style.title, systemImage: style.systemImage).tag(style)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-
             HStack {
                 Toggle("自动对齐", isOn: $useAlignment)
                 if isAligning { ProgressView().controlSize(.small) }
@@ -141,6 +133,26 @@ struct BodyPhotoComparisonView: View {
         }
         .navigationTitle("体型对比")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    ForEach(BodyPhotoComparisonStyle.allCases) { style in
+                        Button {
+                            comparisonStyle = style
+                        } label: {
+                            Label {
+                                Text(style.title)
+                            } icon: {
+                                Image(systemName: comparisonStyle == style ? "checkmark" : style.systemImage)
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: comparisonStyle.systemImage)
+                }
+                .accessibilityLabel("对比风格：\(comparisonStyle.title)")
+            }
+        }
         .fullScreenCover(item: $preview) { BodyPhotoPreviewView(image: $0.image, title: $0.title) }
         .task(id: alignmentTaskID) { await loadAlignedImages() }
     }
