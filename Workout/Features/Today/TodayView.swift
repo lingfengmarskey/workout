@@ -50,9 +50,9 @@ struct TodayView: View {
                 .navigationTitle("今天")
             } else {
                 ContentUnavailableView(
-                    "还没有减脂计划",
-                    systemImage: "figure.walk",
-                    description: Text("首次启动后会自动创建默认 8 周计划。")
+                    "没有进行中的计划",
+                    systemImage: "pause.circle",
+                    description: Text("请在“设置”中创建新计划，或恢复一个已暂停的计划。")
                 )
                 .navigationTitle("今天")
             }
@@ -60,7 +60,7 @@ struct TodayView: View {
     }
 
     private var activePlan: WeightLossPlan? {
-        plans.first(where: { $0.status == .active }) ?? plans.first
+        plans.first(where: { $0.status == .active })
     }
 
     private func todayBodyRecord(for plan: WeightLossPlan) -> DailyBodyRecord? {

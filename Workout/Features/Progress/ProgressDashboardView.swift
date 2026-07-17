@@ -16,7 +16,7 @@ struct ProgressDashboardView: View {
     @State private var waistDrawingProgress = 0.0
 
     private var activePlan: WeightLossPlan? {
-        plans.first(where: { $0.status == .active }) ?? plans.first
+        plans.first(where: { $0.status == .active })
     }
 
     private var weightedRecords: [DailyBodyRecord] {
@@ -36,7 +36,14 @@ struct ProgressDashboardView: View {
                     weeklyReviews(plan: plan)
                 }
 
-                if weightedRecords.isEmpty {
+                if activePlan == nil {
+                    ContentUnavailableView(
+                        "没有进行中的计划",
+                        systemImage: "chart.xyaxis.line",
+                        description: Text("请在“设置”中创建新计划，或从历史计划查看以前的记录。")
+                    )
+                    .padding(.top, 30)
+                } else if weightedRecords.isEmpty {
                     ContentUnavailableView(
                         "还没有体重记录",
                         systemImage: "chart.xyaxis.line",

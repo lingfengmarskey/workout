@@ -31,11 +31,15 @@ enum SeedData {
             dailyProteinTarget: 140,
             dailyWaterTarget: 2.3
         )
+        try create(plan: plan, in: context)
+    }
+
+    static func create(plan: WeightLossPlan, in context: ModelContext) throws {
         context.insert(plan)
 
         let meals = mealTemplates
         for day in 0..<plan.durationDays {
-            guard let date = calendar.date(byAdding: .day, value: day, to: startDate) else { continue }
+            guard let date = Calendar.current.date(byAdding: .day, value: day, to: plan.startDate) else { continue }
             let meal = meals[day % meals.count]
 
             context.insert(DailyBodyRecord(planID: plan.id, date: date))
