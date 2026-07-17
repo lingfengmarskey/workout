@@ -9,6 +9,11 @@ struct ProgressDashboardView: View {
     @Query(sort: \DailyWorkoutPlan.date) private var workoutPlans: [DailyWorkoutPlan]
     @State private var showFullScreenWeightChart = false
     @State private var showFullScreenWaistChart = false
+    @State private var hasScheduledChartLoading = false
+    @State private var showWeightChart = false
+    @State private var showWaistChart = false
+    @State private var weightDrawingProgress = 0.0
+    @State private var waistDrawingProgress = 0.0
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active }) ?? plans.first
@@ -26,7 +31,7 @@ struct ProgressDashboardView: View {
 
                 if let plan = activePlan {
                     weightChart(plan: plan)
-                    if !waistRecords.isEmpty { waistChart }
+                    if !waistRecords.isEmpty { waistChart(plan: plan) }
                     if !photoRecords.isEmpty { photoHistoryCard(plan: plan) }
                     weeklyReviews(plan: plan)
                 }
@@ -53,6 +58,7 @@ struct ProgressDashboardView: View {
                 FullScreenWaistChartView(plan: plan, records: waistRecords)
             }
         }
+        .task { await loadChartsAfterFirstFrame() }
     }
 
     private func photoHistoryCard(plan: WeightLossPlan) -> some View {
@@ -152,8 +158,9 @@ struct ProgressDashboardView: View {
                     .foregroundStyle(.tint)
             }
 
-            Chart {
-                ForEach(0..<plan.durationDays, id: \.self) { day in
+            if showWeightChart {
+                Chart {
+                ForEach(0..<visibleCount(total: plan.durationDays, progress: weightDrawingProgress), id: \.self) { day in
                     if let date = Calendar.current.date(byAdding: .day, value: day, to: plan.startDate) {
                         LineMark(
                             x: .value("日期", date),
@@ -164,7 +171,7 @@ struct ProgressDashboardView: View {
                     }
                 }
 
-                ForEach(weightedRecords) { record in
+                ForEach(Array(weightedRecords.prefix(visibleCount(total: weightedRecords.count, progress: weightDrawingProgress)))) { record in
                     if let weight = record.actualWeight {
                         LineMark(
                             x: .value("日期", record.date),
@@ -181,7 +188,7 @@ struct ProgressDashboardView: View {
                     }
                 }
 
-                ForEach(sevenDayAveragePoints) { point in
+                ForEach(Array(sevenDayAveragePoints.prefix(visibleCount(total: sevenDayAveragePoints.count, progress: weightDrawingProgress)))) { point in
                     LineMark(
                         x: .value("日期", point.date),
                         y: .value("体重", point.value)
@@ -190,18 +197,24 @@ struct ProgressDashboardView: View {
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
                     .interpolationMethod(.catmullRom)
                 }
+                }
+                .chartLegend(position: .bottom)
+                .chartXScale(domain: plan.startDate...plan.endDate)
+                .chartYScale(domain: weightYDomain(plan: plan))
+                .frame(height: 280)
+                .transition(.opacity)
+            } else {
+                chartLoadingPlaceholder(title: "准备体重趋势…", height: 280)
             }
-            .chartLegend(position: .bottom)
-            .frame(height: 280)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         .contentShape(Rectangle())
-        .onTapGesture { showFullScreenWeightChart = true }
+        .onTapGesture { if showWeightChart { showFullScreenWeightChart = true } }
     }
 
-    private var waistChart: some View {
+    private func waistChart(plan: WeightLossPlan) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("腰围趋势").font(.headline)
@@ -210,21 +223,92 @@ struct ProgressDashboardView: View {
                     .font(.subheadline)
                     .foregroundStyle(.tint)
             }
-            Chart(waistRecords) { record in
-                if let waist = record.waist {
-                    LineMark(x: .value("日期", record.date), y: .value("腰围", waist))
-                        .lineStyle(StrokeStyle(lineWidth: 1))
-                    PointMark(x: .value("日期", record.date), y: .value("腰围", waist))
-                        .symbolSize(18)
+            if showWaistChart {
+                Chart(Array(waistRecords.prefix(visibleCount(total: waistRecords.count, progress: waistDrawingProgress)))) { record in
+                    if let waist = record.waist {
+                        LineMark(x: .value("日期", record.date), y: .value("腰围", waist))
+                            .lineStyle(StrokeStyle(lineWidth: 1))
+                        PointMark(x: .value("日期", record.date), y: .value("腰围", waist))
+                            .symbolSize(18)
+                    }
                 }
+                .chartXScale(domain: plan.startDate...plan.endDate)
+                .chartYScale(domain: waistYDomain)
+                .frame(height: 200)
+                .transition(.opacity)
+            } else {
+                chartLoadingPlaceholder(title: "准备腰围趋势…", height: 200)
             }
-            .frame(height: 200)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         .contentShape(Rectangle())
-        .onTapGesture { showFullScreenWaistChart = true }
+        .onTapGesture { if showWaistChart { showFullScreenWaistChart = true } }
+    }
+
+    private func chartLoadingPlaceholder(title: String, height: CGFloat) -> some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text(title)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+    }
+
+    @MainActor
+    private func loadChartsAfterFirstFrame() async {
+        guard !hasScheduledChartLoading else { return }
+        hasScheduledChartLoading = true
+
+        try? await Task.sleep(for: .milliseconds(120))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.2)) { showWeightChart = true }
+        await Task.yield()
+        for step in 1...40 {
+            guard !Task.isCancelled else { return }
+            withAnimation(.linear(duration: 0.035)) {
+                weightDrawingProgress = Double(step) / 40
+            }
+            try? await Task.sleep(for: .milliseconds(22))
+        }
+
+        try? await Task.sleep(for: .milliseconds(140))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.2)) { showWaistChart = true }
+        await Task.yield()
+        for step in 1...32 {
+            guard !Task.isCancelled else { return }
+            withAnimation(.linear(duration: 0.035)) {
+                waistDrawingProgress = Double(step) / 32
+            }
+            try? await Task.sleep(for: .milliseconds(22))
+        }
+    }
+
+    private func visibleCount(total: Int, progress: Double) -> Int {
+        guard total > 0, progress > 0 else { return 0 }
+        return min(total, max(1, Int(ceil(Double(total) * progress))))
+    }
+
+    private func weightYDomain(plan: WeightLossPlan) -> ClosedRange<Double> {
+        let values = [plan.startWeight, plan.phaseTargetWeight]
+            + weightedRecords.compactMap(\.actualWeight)
+            + sevenDayAveragePoints.map(\.value)
+        let lower = (values.min() ?? plan.phaseTargetWeight) - 1
+        let upper = (values.max() ?? plan.startWeight) + 1
+        return lower...upper
+    }
+
+    private var waistYDomain: ClosedRange<Double> {
+        let values = waistRecords.compactMap(\.waist)
+        guard let minimum = values.min(), let maximum = values.max() else { return 0...1 }
+        let padding = max(2, (maximum - minimum) * 0.1)
+        return (minimum - padding)...(maximum + padding)
     }
 
     private var waistRecords: [DailyBodyRecord] {

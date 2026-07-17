@@ -87,6 +87,8 @@ struct BodyPhotoComparisonView: View {
     @State private var preview: HistoryPhotoPreview?
     @State private var useAlignment = true
     @State private var alignedImages: [UUID: UIImage] = [:]
+    @State private var outlineImages: [UUID: UIImage] = [:]
+    @State private var outlineCompositeImage: UIImage?
     @State private var alignmentMessage: String?
     @State private var isAligning = false
     @State private var comparisonStyle: BodyPhotoComparisonStyle = .sideBySide
@@ -126,6 +128,8 @@ struct BodyPhotoComparisonView: View {
                     }
                 case .split:
                     splitComparison
+                case .outline:
+                    outlineComparison
                 }
             }
             .padding(.horizontal)
@@ -268,9 +272,64 @@ struct BodyPhotoComparisonView: View {
         return useAlignment ? (alignedImages[record.id] ?? originalImage) : originalImage
     }
 
+    @ViewBuilder
+    private var outlineComparison: some View {
+        if records.count == 2,
+           let composite = outlineCompositeImage {
+            VStack(spacing: 12) {
+                Button {
+                    preview = HistoryPhotoPreview(image: composite, title: "体型轮廓对比 · \(angle.title)")
+                } label: {
+                    Image(uiImage: composite)
+                        .resizable()
+                        .scaledToFit()
+                        .background(Color.black)
+                }
+                .buttonStyle(.plain)
+                .aspectRatio(3 / 4, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel("打开全屏体型轮廓对比")
+                .accessibilityHint("可双指缩放、拖动或双击放大")
+
+                HStack(spacing: 18) {
+                    outlineLegend(record: records[0], color: .cyan)
+                    outlineLegend(record: records[1], color: .orange)
+                }
+
+                Text("轮廓仅用于观察外形趋势，不代表精确围度或医学测量。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Label("点击轮廓图可全屏查看和缩放", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } else if isAligning {
+            ProgressView("正在生成人体轮廓…")
+                .frame(maxWidth: .infinity, minHeight: 320)
+        } else {
+            ContentUnavailableView(
+                "无法生成人体轮廓",
+                systemImage: "person.crop.rectangle.badge.exclamationmark",
+                description: Text("请确认两个日期都有该角度的完整人体照片。")
+            )
+            .frame(maxWidth: .infinity, minHeight: 320)
+        }
+    }
+
+    private func outlineLegend(record: DailyBodyRecord, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 10, height: 10)
+            Text(record.date.formatted(date: .abbreviated, time: .omitted))
+                .font(.caption.bold())
+        }
+    }
+
     @MainActor
     private func loadAlignedImages() async {
         alignedImages = [:]
+        outlineImages = [:]
+        outlineCompositeImage = nil
         alignmentMessage = nil
         guard records.count == 2,
               let first = BodyPhotoStore.shared.image(for: angle.identifier(in: records[0])),
@@ -285,7 +344,21 @@ struct BodyPhotoComparisonView: View {
         case let .success(alignedFirst, alignedSecond):
             alignedImages[records[0].id] = alignedFirst
             alignedImages[records[1].id] = alignedSecond
-            alignmentMessage = "已按人体高度、中心和脚底基线对齐展示副本。"
+            async let firstOutline = BodyPhotoOutlineService.makeOutline(for: alignedFirst, color: .systemCyan)
+            async let secondOutline = BodyPhotoOutlineService.makeOutline(for: alignedSecond, color: .systemOrange)
+            let outlines = await (firstOutline, secondOutline)
+            if let first = outlines.0, let second = outlines.1 {
+                outlineImages[records[0].id] = first
+                outlineImages[records[1].id] = second
+                outlineCompositeImage = BodyPhotoOutlineService.composeComparison(
+                    reference: alignedFirst,
+                    firstOutline: first,
+                    secondOutline: second
+                )
+                alignmentMessage = "已按人体高度、中心和脚底基线对齐展示副本。"
+            } else {
+                alignmentMessage = "照片已对齐，但部分人体轮廓生成失败。"
+            }
         case let .failure(message):
             alignmentMessage = message
         }
@@ -295,10 +368,15 @@ struct BodyPhotoComparisonView: View {
 private enum BodyPhotoComparisonStyle: String, CaseIterable, Identifiable {
     case sideBySide
     case split
+    case outline
 
     var id: String { rawValue }
-    var title: String { self == .sideBySide ? "并排" : "分割滑动" }
-    var systemImage: String { self == .sideBySide ? "rectangle.split.2x1" : "rectangle.lefthalf.inset.filled" }
+    var title: String {
+        switch self { case .sideBySide: "并排"; case .split: "分割滑动"; case .outline: "轮廓叠加" }
+    }
+    var systemImage: String {
+        switch self { case .sideBySide: "rectangle.split.2x1"; case .split: "rectangle.lefthalf.inset.filled"; case .outline: "person.2" }
+    }
 }
 
 enum HistoryPhotoAngle: String, CaseIterable, Identifiable {
