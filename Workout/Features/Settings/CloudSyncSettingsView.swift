@@ -32,6 +32,9 @@ struct CloudSyncSettingsView: View {
                 if let state = syncState, state.pendingRecordCount > 0 {
                     LabeledContent("待同步记录", value: "\(state.pendingRecordCount)")
                 }
+                if let state = syncState, state.pendingPhotoCount > 0 {
+                    LabeledContent("待同步照片", value: "\(state.pendingPhotoCount)")
+                }
                 if let message = syncState?.lastErrorSummary, !message.isEmpty {
                     Text(message)
                         .font(.footnote)
@@ -69,7 +72,7 @@ struct CloudSyncSettingsView: View {
             }
 
             Section {
-                Text("开启后会先下载并合并 iCloud 中已有的记录，再上传本机变更。结构化记录同步已可用；体型照片将在下一阶段通过 CKAsset 接入。停止此设备同步不会删除本机或 iCloud 数据。")
+                Text("开启后会先下载并合并 iCloud 中已有的记录，再上传本机变更。体型照片使用 CKAsset 存入你的私有数据库，并通过内容哈希避免重复传输。停止此设备同步不会删除本机或 iCloud 数据。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
