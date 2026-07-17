@@ -40,9 +40,13 @@ actor CloudKitInfrastructureService {
         self.database = container.privateCloudDatabase
     }
 
-    func accountAvailability() async -> CloudAccountAvailability {
-        await withCheckedContinuation { continuation in
-            container.accountStatus { status, _ in
+    func accountAvailability() async throws -> CloudAccountAvailability {
+        try await withCheckedThrowingContinuation { continuation in
+            container.accountStatus { status, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
                 let availability: CloudAccountAvailability = switch status {
                 case .available: .available
                 case .noAccount: .noAccount
@@ -57,7 +61,7 @@ actor CloudKitInfrastructureService {
     }
 
     func preparePrivateZone() async throws {
-        guard await accountAvailability() == .available else {
+        guard try await accountAvailability() == .available else {
             throw CloudInfrastructureError.accountUnavailable
         }
 

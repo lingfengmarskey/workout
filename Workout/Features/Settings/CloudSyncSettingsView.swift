@@ -47,7 +47,12 @@ struct CloudSyncSettingsView: View {
     @MainActor
     private func refreshAccountStatus() async {
         isCheckingAccount = true
-        accountAvailability = await CloudKitInfrastructureService.shared.accountAvailability()
+        do {
+            accountAvailability = try await CloudKitInfrastructureService.shared.accountAvailability()
+        } catch {
+            accountAvailability = .couldNotDetermine
+            errorMessage = error.localizedDescription
+        }
         isCheckingAccount = false
     }
 }

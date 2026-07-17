@@ -52,4 +52,21 @@ final class CloudRecordCodecTests: XCTestCase {
         XCTAssertEqual(first.recordType, CloudRecordType.tombstone.rawValue)
         XCTAssertEqual(first["recordName"] as? String, tombstone.recordName)
     }
+
+    func testEveryTombstoneTargetsTheStructuredRecordName() {
+        let id = UUID()
+        let mappings: [(SyncEntityType, CloudRecordType)] = [
+            (.plan, .plan),
+            (.bodyRecord, .body),
+            (.mealPlan, .meal),
+            (.workoutPlan, .workout)
+        ]
+
+        for (entityType, recordType) in mappings {
+            XCTAssertEqual(
+                entityType.recordName(for: id),
+                CloudRecordCodec.recordName(type: recordType, id: id)
+            )
+        }
+    }
 }

@@ -12,6 +12,12 @@ targets:
   Workout:
     type: application
     platform: iOS
+    attributes:
+      SystemCapabilities:
+        com.apple.Push:
+          enabled: 1
+        com.apple.iCloud:
+          enabled: 1
     sources:
       - path: Workout
     settings:
