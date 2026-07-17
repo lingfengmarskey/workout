@@ -111,7 +111,11 @@ struct SettingsView: View {
             }
 
             Section("后续功能") {
-                Label("HealthKit 步数与体重", systemImage: "heart.text.square")
+                NavigationLink {
+                    HealthKitSettingsView()
+                } label: {
+                    Label("健康与步数", systemImage: "heart.text.square")
+                }
                 Label("iCloud 同步", systemImage: "icloud")
                 Label("Face ID", systemImage: "faceid")
                 Label("CSV 导出", systemImage: "square.and.arrow.up")
