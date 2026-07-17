@@ -116,7 +116,11 @@ struct SettingsView: View {
                 } label: {
                     Label("健康与步数", systemImage: "heart.text.square")
                 }
-                Label("iCloud 同步", systemImage: "icloud")
+                NavigationLink {
+                    CloudSyncSettingsView()
+                } label: {
+                    Label("iCloud 同步", systemImage: "icloud")
+                }
                 NavigationLink {
                     AppLockSettingsView()
                 } label: {
