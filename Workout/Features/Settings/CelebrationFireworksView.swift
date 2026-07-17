@@ -7,93 +7,127 @@ struct CelebrationFireworksView: UIViewRepresentable {
 }
 
 private final class FireworksEmitterHostView: UIView {
-    private let emitter = CAEmitterLayer()
+    private var launchWorkItem: DispatchWorkItem?
+    private var launchIndex = 0
+    private let colors: [UIColor] = [.systemPink, .systemYellow, .systemCyan, .systemPurple, .systemOrange]
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        configure()
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        configure()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        emitter.frame = bounds
-        emitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.maxY + 8)
-        emitter.emitterSize = CGSize(width: bounds.width * 0.82, height: 1)
-        CATransaction.commit()
-    }
-
-    private func configure() {
         isUserInteractionEnabled = false
         backgroundColor = .clear
-        emitter.emitterShape = .line
-        emitter.emitterMode = .surface
-        emitter.renderMode = .additive
-        emitter.seed = UInt32.random(in: .min ... .max)
-        emitter.emitterCells = [
-            rocket(color: .systemPink, delay: 0),
-            rocket(color: .systemYellow, delay: 0.45),
-            rocket(color: .systemCyan, delay: 0.9),
-            rocket(color: .systemPurple, delay: 1.35)
-        ]
-        layer.addSublayer(emitter)
     }
 
-    private func rocket(color: UIColor, delay: TimeInterval) -> CAEmitterCell {
-        let rocket = CAEmitterCell()
-        rocket.birthRate = 0.72
-        rocket.beginTime = delay
-        rocket.lifetime = 1.55
-        rocket.lifetimeRange = 0.18
-        rocket.velocity = 300
-        rocket.velocityRange = 55
-        rocket.emissionLongitude = -.pi / 2
-        rocket.emissionRange = .pi / 8
-        rocket.yAcceleration = 115
-        rocket.scale = 0
-        rocket.color = color.cgColor
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            launchWorkItem?.cancel()
+            launchWorkItem = nil
+        } else if launchWorkItem == nil {
+            scheduleNextLaunch(after: 0.15)
+        }
+    }
 
-        let trail = CAEmitterCell()
-        trail.contents = sparkImage
-        trail.birthRate = 55
-        trail.lifetime = 0.45
-        trail.lifetimeRange = 0.12
-        trail.velocity = 32
-        trail.velocityRange = 20
-        trail.emissionRange = .pi * 2
-        trail.scale = 0.07
-        trail.scaleRange = 0.025
-        trail.alphaSpeed = -1.7
-        trail.color = UIColor.white.withAlphaComponent(0.9).cgColor
+    private func scheduleNextLaunch(after delay: TimeInterval) {
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.window != nil, self.bounds.width > 0, self.bounds.height > 0 else {
+                self?.scheduleNextLaunch(after: 0.2)
+                return
+            }
+            self.launchFirework()
+            self.scheduleNextLaunch(after: 0.55)
+        }
+        launchWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
 
-        let explosion = CAEmitterCell()
-        explosion.contents = sparkImage
-        explosion.birthRate = 1_100
-        explosion.beginTime = 1.18
-        explosion.duration = 0.08
-        explosion.lifetime = 1.7
-        explosion.lifetimeRange = 0.35
-        explosion.velocity = 155
-        explosion.velocityRange = 55
-        explosion.emissionRange = .pi * 2
-        explosion.yAcceleration = 95
-        explosion.scale = 0.085
-        explosion.scaleRange = 0.035
-        explosion.scaleSpeed = -0.025
-        explosion.alphaSpeed = -0.62
-        explosion.color = color.cgColor
-        explosion.redRange = 0.25
-        explosion.greenRange = 0.25
-        explosion.blueRange = 0.25
+    private func launchFirework() {
+        let color = colors[launchIndex % colors.count]
+        launchIndex += 1
+        let start = CGPoint(x: bounds.midX + CGFloat.random(in: -bounds.width * 0.32 ... bounds.width * 0.32), y: bounds.maxY + 12)
+        let destination = CGPoint(x: CGFloat.random(in: bounds.width * 0.16 ... bounds.width * 0.84), y: CGFloat.random(in: bounds.height * 0.12 ... bounds.height * 0.5))
+        let flightDuration = Double.random(in: 0.75 ... 1.05)
 
-        rocket.emitterCells = [trail, explosion]
-        return rocket
+        let trailLayer = CAEmitterLayer()
+        trailLayer.frame = bounds
+        trailLayer.emitterShape = .point
+        trailLayer.emitterMode = .points
+        trailLayer.renderMode = .additive
+        trailLayer.emitterPosition = destination
+        trailLayer.emitterCells = [trailCell(color: color)]
+        layer.addSublayer(trailLayer)
+
+        let flight = CABasicAnimation(keyPath: "emitterPosition")
+        flight.fromValue = start
+        flight.toValue = destination
+        flight.duration = flightDuration
+        flight.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        trailLayer.add(flight, forKey: "flight")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + flightDuration) { [weak self, weak trailLayer] in
+            trailLayer?.birthRate = 0
+            self?.explode(at: destination, color: color)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + flightDuration + 1) { [weak trailLayer] in
+            trailLayer?.removeFromSuperlayer()
+        }
+    }
+
+    private func explode(at point: CGPoint, color: UIColor) {
+        let burstLayer = CAEmitterLayer()
+        burstLayer.frame = bounds
+        burstLayer.emitterShape = .point
+        burstLayer.emitterMode = .points
+        burstLayer.renderMode = .additive
+        burstLayer.emitterPosition = point
+        burstLayer.emitterCells = [burstCell(color: color), burstCell(color: .white, scale: 0.045)]
+        layer.addSublayer(burstLayer)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) { [weak burstLayer] in
+            burstLayer?.birthRate = 0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { [weak burstLayer] in
+            burstLayer?.removeFromSuperlayer()
+        }
+    }
+
+    private func trailCell(color: UIColor) -> CAEmitterCell {
+        let cell = CAEmitterCell()
+        cell.contents = sparkImage
+        cell.birthRate = 95
+        cell.lifetime = 0.5
+        cell.lifetimeRange = 0.15
+        cell.velocity = 18
+        cell.velocityRange = 12
+        cell.emissionRange = .pi * 2
+        cell.scale = 0.055
+        cell.scaleRange = 0.02
+        cell.alphaSpeed = -1.7
+        cell.color = color.cgColor
+        return cell
+    }
+
+    private func burstCell(color: UIColor, scale: CGFloat = 0.075) -> CAEmitterCell {
+        let cell = CAEmitterCell()
+        cell.contents = sparkImage
+        cell.birthRate = 850
+        cell.lifetime = 1.65
+        cell.lifetimeRange = 0.25
+        cell.velocity = 135
+        cell.velocityRange = 45
+        cell.emissionRange = .pi * 2
+        cell.yAcceleration = 85
+        cell.scale = scale
+        cell.scaleRange = 0.025
+        cell.scaleSpeed = -0.025
+        cell.alphaSpeed = -0.7
+        cell.color = color.cgColor
+        return cell
     }
 
     private lazy var sparkImage: CGImage? = {
@@ -101,13 +135,13 @@ private final class FireworksEmitterHostView: UIView {
         return UIGraphicsImageRenderer(size: size).image { context in
             let colors = [
                 UIColor.white.cgColor,
-                UIColor.white.withAlphaComponent(0.65).cgColor,
+                UIColor.white.withAlphaComponent(0.72).cgColor,
                 UIColor.clear.cgColor
             ] as CFArray
             guard let gradient = CGGradient(
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
                 colors: colors,
-                locations: [0, 0.28, 1]
+                locations: [0, 0.3, 1]
             ) else { return }
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             context.cgContext.drawRadialGradient(
