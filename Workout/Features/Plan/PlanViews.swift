@@ -410,8 +410,8 @@ struct WorkoutPlanDetailView: View {
             plan.actualDurationMinutes.map { String($0) } ?? "",
             plan.actualSteps.map { String($0) } ?? "",
             plan.fatigueLevel.map { String($0) } ?? "",
-            plan.painDescription,
-            plan.note
+            "\(plan.painDescription.utf8.count):\(plan.painDescription)",
+            "\(plan.note.utf8.count):\(plan.note)"
         ].joined(separator: "|")
     }
 }
