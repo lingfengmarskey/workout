@@ -32,6 +32,13 @@ struct PlanStatusFeedbackView: View {
                     .allowsHitTesting(false)
             }
 
+            if !reduceMotion, [.active, .paused, .abandoned].contains(feedback.status) {
+                PlanStatusAmbientAnimationView(status: feedback.status)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+
             ScrollView {
             VStack(spacing: 24) {
                 Image(systemName: icon)
