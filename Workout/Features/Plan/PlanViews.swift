@@ -442,13 +442,13 @@ private struct ActualFoodEntryEditorView: View {
                 Section("本条估算") {
                     if let calories = previewCalories {
                         LabeledContent("能量", value: formattedCalories(calories))
-                        if let protein = previewMacro(protein) {
+                        if let protein = previewMacro(self.protein) {
                             LabeledContent("蛋白质", value: formattedMacro(protein))
                         }
-                        if let carbohydrates = previewMacro(carbohydrates) {
+                        if let carbohydrates = previewMacro(self.carbohydrates) {
                             LabeledContent("碳水", value: formattedMacro(carbohydrates))
                         }
-                        if let fat = previewMacro(fat) {
+                        if let fat = previewMacro(self.fat) {
                             LabeledContent("脂肪", value: formattedMacro(fat))
                         }
                     } else {
