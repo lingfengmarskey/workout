@@ -66,6 +66,51 @@ final class CloudRecordMergeServiceTests: XCTestCase {
         XCTAssertEqual(summary.ignored, 1)
     }
 
+    func testPersistedTombstonePreventsStaleRecordInLaterBatchFromResurrecting() throws {
+        let context = try makeContext()
+        let id = UUID()
+        let recordName = SyncEntityType.plan.recordName(for: id)
+        let tombstone = SyncTombstone(
+            recordName: recordName,
+            entityType: .plan,
+            deletedAt: Date(timeIntervalSince1970: 200),
+            deviceID: "device-b"
+        )
+
+        _ = try CloudRecordMergeService.apply(
+            changedRecords: [CloudRecordCodec.record(for: tombstone)],
+            deletedRecords: [],
+            in: context
+        )
+        XCTAssertEqual(try context.fetch(FetchDescriptor<SyncTombstone>()).count, 1)
+
+        let stalePlan = makePlan(id: id, name: "离线旧记录", updatedAt: Date(timeIntervalSince1970: 150))
+        let secondBatch = try CloudRecordMergeService.apply(
+            changedRecords: [CloudRecordCodec.record(for: stalePlan)],
+            deletedRecords: [],
+            in: context
+        )
+
+        XCTAssertTrue(try context.fetch(FetchDescriptor<WeightLossPlan>()).isEmpty)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<SyncTombstone>()).count, 1)
+        XCTAssertEqual(secondBatch.ignored, 1)
+    }
+
+    func testNewerServerEntitySupersedesOlderDeletion() {
+        XCTAssertTrue(CloudDeletionConflictResolver.entity(
+            updatedAt: Date(timeIntervalSince1970: 300),
+            deviceID: "device-a",
+            isNewerThanDeletionAt: Date(timeIntervalSince1970: 200),
+            deletionDeviceID: "device-z"
+        ))
+        XCTAssertFalse(CloudDeletionConflictResolver.entity(
+            updatedAt: Date(timeIntervalSince1970: 100),
+            deviceID: "device-z",
+            isNewerThanDeletionAt: Date(timeIntervalSince1970: 200),
+            deletionDeviceID: "device-a"
+        ))
+    }
+
     private func makeContext() throws -> ModelContext {
         let schema = Schema(versionedSchema: WorkoutSchemaV2.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

@@ -9,6 +9,18 @@ struct CloudMergeSummary {
     var ignored = 0
 }
 
+enum CloudDeletionConflictResolver {
+    static func entity(
+        updatedAt: Date,
+        deviceID: String,
+        isNewerThanDeletionAt deletedAt: Date,
+        deletionDeviceID: String
+    ) -> Bool {
+        if updatedAt != deletedAt { return updatedAt > deletedAt }
+        return deviceID > deletionDeviceID
+    }
+}
+
 @MainActor
 enum CloudRecordMergeService {
     static func apply(
@@ -19,34 +31,62 @@ enum CloudRecordMergeService {
         var summary = CloudMergeSummary()
         var photoIdentifiersToDelete: [String] = []
 
-        // Tombstones are applied first so a stale changed record in the same
-        // CloudKit batch cannot resurrect an object deleted on another device.
         let payloads = try changedRecords.map { try CloudRecordPayload.decode($0) }
         for payload in payloads {
             if case let .tombstone(tombstone) = payload {
-                if try delete(
-                    recordName: tombstone.recordName,
-                    entityType: tombstone.entityType,
-                    in: context,
-                    photoIdentifiersToDelete: &photoIdentifiersToDelete
-                ) {
-                    summary.deleted += 1
-                } else {
+                let stored = try upsert(tombstone, in: context)
+                if try localEntityIsNewer(than: stored, in: context) {
+                    context.delete(stored)
                     summary.ignored += 1
+                } else {
+                    if try delete(
+                        recordName: tombstone.recordName,
+                        entityType: tombstone.entityType,
+                        in: context,
+                        photoIdentifiersToDelete: &photoIdentifiersToDelete
+                    ) {
+                        summary.deleted += 1
+                    } else {
+                        summary.ignored += 1
+                    }
                 }
             }
         }
 
-        let tombstonedNames = Set(payloads.compactMap { payload -> String? in
-            if case let .tombstone(tombstone) = payload { return tombstone.recordName }
-            return nil
-        })
+        var tombstonesByRecordName: [String: SyncTombstone] = [:]
+        for tombstone in try context.fetch(FetchDescriptor<SyncTombstone>()) {
+            if let existing = tombstonesByRecordName[tombstone.recordName] {
+                let tombstoneWins = tombstone.deletedAt > existing.deletedAt || (
+                    tombstone.deletedAt == existing.deletedAt && tombstone.deviceID > existing.deviceID
+                )
+                if tombstoneWins { tombstonesByRecordName[tombstone.recordName] = tombstone }
+            } else {
+                tombstonesByRecordName[tombstone.recordName] = tombstone
+            }
+        }
 
         for (record, payload) in zip(changedRecords, payloads) {
             if case .tombstone = payload { continue }
-            guard !tombstonedNames.contains(record.recordID.recordName) else {
-                summary.ignored += 1
-                continue
+            if let tombstone = tombstonesByRecordName[record.recordID.recordName],
+               let identity = payload.identity {
+                if CloudDeletionConflictResolver.entity(
+                    updatedAt: identity.updatedAt,
+                    deviceID: identity.deviceID,
+                    isNewerThanDeletionAt: tombstone.deletedAt,
+                    deletionDeviceID: tombstone.deviceID
+                ) {
+                    context.delete(tombstone)
+                    tombstonesByRecordName.removeValue(forKey: record.recordID.recordName)
+                } else {
+                    _ = try delete(
+                        recordName: tombstone.recordName,
+                        entityType: tombstone.entityType,
+                        in: context,
+                        photoIdentifiersToDelete: &photoIdentifiersToDelete
+                    )
+                    summary.ignored += 1
+                    continue
+                }
             }
             switch payload {
             case let .plan(value): try merge(value, in: context, summary: &summary)
@@ -238,6 +278,53 @@ enum CloudRecordMergeService {
         return identity.deviceID > SyncDeviceIdentity.current
     }
 
+    private static func upsert(_ payload: CloudTombstonePayload, in context: ModelContext) throws -> SyncTombstone {
+        let tombstones = try context.fetch(FetchDescriptor<SyncTombstone>())
+        if let existing = tombstones.first(where: { $0.recordName == payload.recordName }) {
+            let incomingWins = payload.deletedAt > existing.deletedAt || (
+                payload.deletedAt == existing.deletedAt && payload.deviceID >= existing.deviceID
+            )
+            if incomingWins {
+                existing.entityTypeRaw = payload.entityType.rawValue
+                existing.deletedAt = payload.deletedAt
+                existing.deviceID = payload.deviceID
+                existing.isUploaded = true
+            }
+            return existing
+        }
+        let tombstone = SyncTombstone(
+            recordName: payload.recordName,
+            entityType: payload.entityType,
+            deletedAt: payload.deletedAt,
+            deviceID: payload.deviceID
+        )
+        tombstone.isUploaded = true
+        context.insert(tombstone)
+        return tombstone
+    }
+
+    private static func localEntityIsNewer(than tombstone: SyncTombstone, in context: ModelContext) throws -> Bool {
+        guard let id = UUID(uuidString: String(tombstone.recordName.suffix(36))) else { return false }
+        let updatedAt: Date?
+        switch tombstone.entityType {
+        case .plan:
+            updatedAt = try context.fetch(FetchDescriptor<WeightLossPlan>()).first(where: { $0.id == id })?.updatedAt
+        case .bodyRecord:
+            updatedAt = try context.fetch(FetchDescriptor<DailyBodyRecord>()).first(where: { $0.id == id })?.updatedAt
+        case .mealPlan:
+            updatedAt = try context.fetch(FetchDescriptor<DailyMealPlan>()).first(where: { $0.id == id })?.updatedAt
+        case .workoutPlan:
+            updatedAt = try context.fetch(FetchDescriptor<DailyWorkoutPlan>()).first(where: { $0.id == id })?.updatedAt
+        }
+        guard let updatedAt else { return false }
+        return CloudDeletionConflictResolver.entity(
+            updatedAt: updatedAt,
+            deviceID: SyncDeviceIdentity.current,
+            isNewerThanDeletionAt: tombstone.deletedAt,
+            deletionDeviceID: tombstone.deviceID
+        )
+    }
+
     @discardableResult
     private static func delete(
         recordName: String,
@@ -262,6 +349,18 @@ enum CloudRecordMergeService {
             context.delete(model)
         }
         return true
+    }
+}
+
+private extension CloudRecordPayload {
+    var identity: CloudPayloadIdentity? {
+        switch self {
+        case let .plan(value): value.identity
+        case let .body(value): value.identity
+        case let .meal(value): value.identity
+        case let .workout(value): value.identity
+        case .tombstone: nil
+        }
     }
 }
 

@@ -187,6 +187,7 @@ struct CloudTombstonePayload {
     let recordName: String
     let entityType: SyncEntityType
     let deletedAt: Date
+    let deviceID: String
 
     init(record: CKRecord) throws {
         recordName = try record.requiredString("recordName")
@@ -195,6 +196,7 @@ struct CloudTombstonePayload {
         }
         self.entityType = entityType
         deletedAt = try record.requiredDate("deletedAt")
+        deviceID = record.string("deviceID") ?? ""
     }
 }
 

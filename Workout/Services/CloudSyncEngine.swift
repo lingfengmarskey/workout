@@ -103,33 +103,27 @@ final class CloudSyncEngine {
         let workouts = try context.fetch(FetchDescriptor<DailyWorkoutPlan>()).filter { $0.updatedAt > cutoff }
         let tombstones = try context.fetch(FetchDescriptor<SyncTombstone>()).filter { !$0.isUploaded }
 
-        var localRecords = plans.map { CloudRecordCodec.record(for: $0) }
-        localRecords += bodies.map { CloudRecordCodec.record(for: $0) }
-        localRecords += meals.map { CloudRecordCodec.record(for: $0) }
-        localRecords += workouts.map { CloudRecordCodec.record(for: $0) }
-        localRecords += tombstones.map { CloudRecordCodec.record(for: $0) }
-        state.pendingRecordCount = localRecords.count
+        var structuredRecords = plans.map { CloudRecordCodec.record(for: $0) }
+        structuredRecords += bodies.map { CloudRecordCodec.record(for: $0) }
+        structuredRecords += meals.map { CloudRecordCodec.record(for: $0) }
+        structuredRecords += workouts.map { CloudRecordCodec.record(for: $0) }
+        let tombstoneRecords = tombstones.map { CloudRecordCodec.record(for: $0) }
+        let targetIDs = tombstones.map { CKRecord.ID(recordName: $0.recordName, zoneID: CloudKitConstants.zoneID) }
+        let lookupIDs = structuredRecords.map { $0.recordID } + tombstoneRecords.map { $0.recordID } + targetIDs
+        state.pendingRecordCount = structuredRecords.count + tombstones.count
         try context.save()
 
-        guard !localRecords.isEmpty || !tombstones.isEmpty else { return }
+        guard !lookupIDs.isEmpty else { return }
 
-        let lookup = try await CloudKitTransport.shared.fetchRecords(withIDs: localRecords.map { $0.recordID })
+        let lookup = try await CloudKitTransport.shared.fetchRecords(withIDs: lookupIDs)
         let fatalLookupErrors = lookup.errorsByID.values.filter { !Self.isUnknownItem($0) }
         if let error = fatalLookupErrors.first { throw error }
 
         var recordsToSave: [CKRecord] = []
         var remoteRecordsToApply: [CKRecord] = []
-        for local in localRecords {
+        for local in structuredRecords {
             guard let server = lookup.recordsByID[local.recordID] else {
                 recordsToSave.append(local)
-                continue
-            }
-            if local.recordType == CloudRecordType.tombstone.rawValue {
-                let localDeletedAt = local["deletedAt"] as? Date ?? .distantPast
-                let serverDeletedAt = server["deletedAt"] as? Date ?? .distantPast
-                if localDeletedAt > serverDeletedAt {
-                    recordsToSave.append(CloudRecordCodec.rebasing(local, onto: server))
-                }
                 continue
             }
             let localIdentity = try CloudPayloadIdentity(record: local)
@@ -146,11 +140,54 @@ final class CloudSyncEngine {
             }
         }
 
+        var activeTombstones: [SyncTombstone] = []
+        var tombstoneRecordAlreadyExists = Set<CKRecord.ID>()
+        for (tombstone, localRecord) in zip(tombstones, tombstoneRecords) {
+            let targetID = CKRecord.ID(recordName: tombstone.recordName, zoneID: CloudKitConstants.zoneID)
+            if let serverTarget = lookup.recordsByID[targetID] {
+                let targetIdentity = try CloudPayloadIdentity(record: serverTarget)
+                if CloudDeletionConflictResolver.entity(
+                    updatedAt: targetIdentity.updatedAt,
+                    deviceID: targetIdentity.deviceID,
+                    isNewerThanDeletionAt: tombstone.deletedAt,
+                    deletionDeviceID: tombstone.deviceID
+                ) {
+                    remoteRecordsToApply.append(serverTarget)
+                    context.delete(tombstone)
+                    continue
+                }
+            }
+
+            activeTombstones.append(tombstone)
+            if let serverTombstone = lookup.recordsByID[localRecord.recordID] {
+                tombstoneRecordAlreadyExists.insert(localRecord.recordID)
+                let serverPayload: CloudTombstonePayload
+                if case let .tombstone(payload) = try CloudRecordPayload.decode(serverTombstone) {
+                    serverPayload = payload
+                } else {
+                    throw CloudRecordPayloadError.unsupportedRecordType(serverTombstone.recordType)
+                }
+                let localWins = tombstone.deletedAt > serverPayload.deletedAt || (
+                    tombstone.deletedAt == serverPayload.deletedAt && tombstone.deviceID > serverPayload.deviceID
+                )
+                if localWins {
+                    recordsToSave.append(CloudRecordCodec.rebasing(localRecord, onto: serverTombstone))
+                } else {
+                    tombstone.deletedAt = serverPayload.deletedAt
+                    tombstone.deviceID = serverPayload.deviceID
+                }
+            } else {
+                recordsToSave.append(localRecord)
+            }
+        }
+
+        try context.save()
+
         if !remoteRecordsToApply.isEmpty {
             _ = try CloudRecordMergeService.apply(changedRecords: remoteRecordsToApply, deletedRecords: [], in: context)
         }
 
-        let targetIDsToDelete = tombstones.map {
+        let targetIDsToDelete = activeTombstones.map {
             CKRecord.ID(recordName: $0.recordName, zoneID: CloudKitConstants.zoneID)
         }
         let result = try await CloudKitTransport.shared.modifyRecords(
@@ -172,10 +209,10 @@ final class CloudSyncEngine {
         let deletedOrMissingIDs = result.deletedRecordIDs.union(Set(result.deleteErrors.compactMap { id, error in
             Self.isUnknownItem(error) ? id : nil
         }))
-        for tombstone in tombstones {
+        for tombstone in activeTombstones {
             let tombstoneID = CloudRecordCodec.record(for: tombstone).recordID
             let targetID = CKRecord.ID(recordName: tombstone.recordName, zoneID: CloudKitConstants.zoneID)
-            if (savedOrResolvedIDs.contains(tombstoneID) || lookup.recordsByID[tombstoneID] != nil),
+            if (savedOrResolvedIDs.contains(tombstoneID) || tombstoneRecordAlreadyExists.contains(tombstoneID)),
                deletedOrMissingIDs.contains(targetID) {
                 tombstone.isUploaded = true
             }
