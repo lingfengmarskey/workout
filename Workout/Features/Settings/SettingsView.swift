@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var testDataMessage: String?
     @State private var pendingStatus: PlanStatus?
     @State private var statusFeedback: PlanStatusFeedback?
+    @State private var statusErrorMessage: String?
 
     private var activePlan: WeightLossPlan? {
         plans.first(where: { $0.status == .active })
@@ -130,13 +131,12 @@ struct SettingsView: View {
 #endif
         }
         .navigationTitle("设置")
-        .confirmationDialog(
+        .alert(
             pendingStatus?.confirmationTitle ?? "更改计划状态？",
             isPresented: Binding(
                 get: { pendingStatus != nil },
                 set: { if !$0 { pendingStatus = nil } }
-            ),
-            titleVisibility: .visible
+            )
         ) {
             if let pendingStatus {
                 Button(pendingStatus.confirmationButtonTitle, role: pendingStatus == .abandoned ? .destructive : nil) {
@@ -152,8 +152,16 @@ struct SettingsView: View {
                 statusFeedback = nil
             }
         }
+        .alert("无法更改计划状态", isPresented: Binding(
+            get: { statusErrorMessage != nil },
+            set: { if !$0 { statusErrorMessage = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(statusErrorMessage ?? "")
+        }
 #if DEBUG
-        .confirmationDialog("生成测试数据？", isPresented: $showTestDataConfirmation, titleVisibility: .visible) {
+        .alert("生成测试数据？", isPresented: $showTestDataConfirmation) {
             Button("确认生成", role: .destructive) { generateTestData() }
             Button("取消", role: .cancel) {}
         } message: {
@@ -176,11 +184,77 @@ struct SettingsView: View {
 
     private func applyStatus(_ status: PlanStatus) {
         guard let plan = activePlan else { return }
+        let completionSummary = status == .completed ? makeCompletionSummary(for: plan) : nil
         plan.status = status
         plan.updatedAt = .now
-        try? modelContext.save()
-        pendingStatus = nil
-        statusFeedback = PlanStatusFeedback(status: status, planName: plan.name)
+        do {
+            try modelContext.save()
+            pendingStatus = nil
+            statusFeedback = PlanStatusFeedback(
+                status: status,
+                planName: plan.name,
+                completionSummary: completionSummary
+            )
+        } catch {
+            modelContext.rollback()
+            pendingStatus = nil
+            statusErrorMessage = "保存失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func makeCompletionSummary(for plan: WeightLossPlan) -> PlanCompletionSummary {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let planBodyRecords = bodyRecords.filter { $0.planID == plan.id }
+        let latestWeight = planBodyRecords.last(where: { $0.actualWeight != nil })?.actualWeight
+        let planMeals = mealPlans.filter { $0.planID == plan.id && $0.date <= today }
+        let mealScores = planMeals.flatMap {
+            [$0.breakfastStatus, $0.lunchStatus, $0.dinnerStatus, $0.snackStatus]
+        }.map(completionScore)
+        let planWorkouts = workoutPlans.filter { $0.planID == plan.id && $0.date <= today }
+        let workoutScores = planWorkouts.map { completionScore($0.status) }
+        let bodyActivityDates = planBodyRecords.filter(hasBodyActivity).map { calendar.startOfDay(for: $0.date) }
+        let mealActivityDates = planMeals.filter(hasMealActivity).map { calendar.startOfDay(for: $0.date) }
+        let workoutActivityDates = planWorkouts.filter(hasWorkoutActivity).map { calendar.startOfDay(for: $0.date) }
+        let executedDays = Set(bodyActivityDates + mealActivityDates + workoutActivityDates).count
+
+        return PlanCompletionSummary(
+            executedDays: executedDays,
+            startWeight: plan.startWeight,
+            latestWeight: latestWeight,
+            mealCompletionRate: average(mealScores),
+            workoutCompletionRate: average(workoutScores)
+        )
+    }
+
+    private func completionScore(_ status: CompletionStatus) -> Double {
+        switch status {
+        case .completed, .rest: 1
+        case .partial: 0.5
+        case .notRecorded, .missed: 0
+        }
+    }
+
+    private func average(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private func hasBodyActivity(_ record: DailyBodyRecord) -> Bool {
+        record.actualWeight != nil || record.waist != nil || record.sleepHours != nil
+            || record.morningEnergy != nil || !record.note.isEmpty
+            || record.frontPhotoPath != nil || record.sidePhotoPath != nil || record.backPhotoPath != nil
+    }
+
+    private func hasMealActivity(_ plan: DailyMealPlan) -> Bool {
+        [plan.breakfastStatus, plan.lunchStatus, plan.dinnerStatus, plan.snackStatus]
+            .contains { $0 != .notRecorded }
+            || plan.hungerLevel != nil || plan.actualWater != nil || !plan.note.isEmpty
+    }
+
+    private func hasWorkoutActivity(_ plan: DailyWorkoutPlan) -> Bool {
+        plan.status != .notRecorded || plan.actualDurationMinutes != nil || plan.actualSteps != nil
+            || plan.fatigueLevel != nil || !plan.painDescription.isEmpty || !plan.note.isEmpty
     }
 
 #if DEBUG

@@ -4,6 +4,15 @@ struct PlanStatusFeedback: Identifiable {
     let id = UUID()
     let status: PlanStatus
     let planName: String
+    var completionSummary: PlanCompletionSummary? = nil
+}
+
+struct PlanCompletionSummary {
+    let executedDays: Int
+    let startWeight: Double
+    let latestWeight: Double?
+    let mealCompletionRate: Double?
+    let workoutCompletionRate: Double?
 }
 
 struct PlanStatusFeedbackView: View {
@@ -18,16 +27,12 @@ struct PlanStatusFeedbackView: View {
                 .ignoresSafeArea()
 
             if feedback.status == .completed && !reduceMotion {
-                ForEach(0..<18, id: \.self) { index in
-                    Circle()
-                        .fill(index.isMultiple(of: 2) ? .yellow : .white)
-                        .frame(width: 8, height: 8)
-                        .offset(x: isVisible ? CGFloat((index % 6) - 3) * 52 : 0,
-                                y: isVisible ? CGFloat((index / 6) - 1) * 150 : 0)
-                        .opacity(isVisible ? 0.75 : 0)
-                }
+                CelebrationFireworksView()
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
             }
 
+            ScrollView {
             VStack(spacing: 24) {
                 Image(systemName: icon)
                     .font(.system(size: 88, weight: .semibold))
@@ -39,7 +44,11 @@ struct PlanStatusFeedbackView: View {
                     Text(feedback.planName).font(.title3.weight(.semibold))
                     Text(message)
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(feedback.status == .completed ? Color.white.opacity(0.82) : Color.secondary)
+                }
+
+                if let summary = feedback.completionSummary, feedback.status == .completed {
+                    completionSummary(summary)
                 }
 
                 Button("完成", action: dismiss)
@@ -47,12 +56,58 @@ struct PlanStatusFeedbackView: View {
                     .controlSize(.large)
             }
             .padding(32)
+            .foregroundStyle(feedback.status == .completed ? Color.white : Color.primary)
+            }
         }
         .onAppear {
             withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.7, dampingFraction: 0.68)) {
                 isVisible = true
             }
         }
+    }
+
+    private func completionSummary(_ summary: PlanCompletionSummary) -> some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 12) {
+                achievementMetric("执行天数", "\(summary.executedDays) 天")
+                achievementMetric("起始体重", weight(summary.startWeight))
+            }
+            HStack(spacing: 12) {
+                if let latest = summary.latestWeight {
+                    achievementMetric("最后体重", weight(latest))
+                    achievementMetric("累计减重", signedWeight(summary.startWeight - latest))
+                }
+            }
+            HStack(spacing: 12) {
+                if let rate = summary.mealCompletionRate {
+                    achievementMetric("饮食执行率", rate.formatted(.percent.precision(.fractionLength(0))))
+                }
+                if let rate = summary.workoutCompletionRate {
+                    achievementMetric("锻炼执行率", rate.formatted(.percent.precision(.fractionLength(0))))
+                }
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func achievementMetric(_ title: String, _ value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(feedback.status == .completed ? Color.white.opacity(0.75) : Color.secondary)
+            Text(value).font(.title3.bold()).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func weight(_ value: Double) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(1)))) kg"
+    }
+
+    private func signedWeight(_ value: Double) -> String {
+        let prefix = value > 0 ? "+" : ""
+        return "\(prefix)\(value.formatted(.number.precision(.fractionLength(1)))) kg"
     }
 
     private var title: String {
@@ -88,7 +143,7 @@ struct PlanStatusFeedbackView: View {
     private var colors: [Color] {
         switch feedback.status {
         case .active: [.green.opacity(0.35), .mint.opacity(0.2), Color(uiColor: .systemBackground)]
-        case .completed: [.yellow.opacity(0.75), .orange.opacity(0.35), Color(uiColor: .systemBackground)]
+        case .completed: [Color(red: 0.005, green: 0.008, blue: 0.018), Color(red: 0.018, green: 0.025, blue: 0.055)]
         case .paused: [.blue.opacity(0.28), Color(uiColor: .systemBackground)]
         case .abandoned: [.gray.opacity(0.4), .blue.opacity(0.15), Color(uiColor: .systemBackground)]
         default: [.green.opacity(0.25), Color(uiColor: .systemBackground)]

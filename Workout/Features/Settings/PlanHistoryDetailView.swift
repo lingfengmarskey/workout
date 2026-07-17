@@ -4,6 +4,7 @@ import SwiftUI
 
 struct PlanHistoryDetailView: View {
     let plan: WeightLossPlan
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query private var plans: [WeightLossPlan]
     @Query(sort: \DailyBodyRecord.date) private var bodyRecords: [DailyBodyRecord]
@@ -14,6 +15,7 @@ struct PlanHistoryDetailView: View {
     @State private var showWaistChart = false
     @State private var feedback: PlanStatusFeedback?
     @State private var errorMessage: String?
+    @State private var showDeleteConfirmation = false
 
     private var records: [DailyBodyRecord] {
         bodyRecords.filter { $0.planID == plan.id }
@@ -124,10 +126,20 @@ struct PlanHistoryDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            if plan.status != .active {
+                Section {
+                    Button("删除此历史计划…", role: .destructive) {
+                        showDeleteConfirmation = true
+                    }
+                } footer: {
+                    Text("删除会永久清除这个计划及其全部记录和体型照片，无法撤销。")
+                }
+            }
         }
         .navigationTitle(plan.name)
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("重新开启这个计划？", isPresented: $showResumeConfirmation, titleVisibility: .visible) {
+        .alert("重新开启这个计划？", isPresented: $showResumeConfirmation) {
             Button("确认重新开启") { resumePlan() }
             Button("取消", role: .cancel) {}
         } message: {
@@ -140,6 +152,12 @@ struct PlanHistoryDetailView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+        .alert("永久删除这个计划？", isPresented: $showDeleteConfirmation) {
+            Button("永久删除计划", role: .destructive) { deletePlan() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("“\(plan.name)”及其身体记录、体型照片、饮食记录、锻炼记录和周报数据都会被永久删除。此操作无法撤销。")
         }
         .fullScreenCover(item: $feedback) { item in
             PlanStatusFeedbackView(feedback: item) { feedback = nil }
@@ -173,6 +191,31 @@ struct PlanHistoryDetailView: View {
         } catch {
             modelContext.rollback()
             errorMessage = "保存失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func deletePlan() {
+        guard plan.status != .active else {
+            errorMessage = "进行中的计划不能删除。请先由你手动暂停、完成或放弃该计划。"
+            return
+        }
+
+        let planRecords = records
+        let photoIdentifiers = planRecords.flatMap {
+            [$0.frontPhotoPath, $0.sidePhotoPath, $0.backPhotoPath].compactMap { $0 }
+        }
+        mealPlans.filter { $0.planID == plan.id }.forEach(modelContext.delete)
+        workoutPlans.filter { $0.planID == plan.id }.forEach(modelContext.delete)
+        planRecords.forEach(modelContext.delete)
+        modelContext.delete(plan)
+
+        do {
+            try modelContext.save()
+            photoIdentifiers.forEach { try? BodyPhotoStore.shared.delete(identifier: $0) }
+            dismiss()
+        } catch {
+            modelContext.rollback()
+            errorMessage = "删除失败：\(error.localizedDescription)"
         }
     }
 }
