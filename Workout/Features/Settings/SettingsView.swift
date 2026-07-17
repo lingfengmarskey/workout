@@ -49,6 +49,14 @@ struct SettingsView: View {
                         }
                     }
                 }
+
+                Section {
+                    NavigationLink {
+                        PlanCreateView()
+                    } label: {
+                        Label("创建新计划", systemImage: "plus.circle.fill")
+                    }
+                }
             }
 
             Section("后续功能") {
