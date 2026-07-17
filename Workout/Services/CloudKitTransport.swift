@@ -29,28 +29,30 @@ actor CloudKitTransport {
 
             let accumulator = ZoneChangeAccumulator()
             operation.recordChangedBlock = { record in
-                accumulator.changedRecords.append(record)
+                accumulator.addChanged(record)
             }
             operation.recordWithIDWasDeletedBlock = { recordID, recordType in
-                accumulator.deletedRecords.append((recordID, recordType))
+                accumulator.addDeleted(recordID: recordID, recordType: recordType)
             }
             operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
-                accumulator.changeToken = token
+                accumulator.updateToken(token)
             }
-            operation.recordZoneFetchCompletionBlock = { _, token, _, _, error in
-                if let token { accumulator.changeToken = token }
-                if let error { accumulator.zoneError = error }
+            operation.recordZoneFetchCompletionBlock = { _, token, _, moreComing, error in
+                accumulator.finishZone(token: token, moreComing: moreComing, error: error)
             }
             operation.fetchRecordZoneChangesCompletionBlock = { error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else if let zoneError = accumulator.zoneError {
+                let snapshot = accumulator.snapshot()
+                if let zoneError = snapshot.zoneError {
                     continuation.resume(throwing: zoneError)
+                } else if snapshot.moreComing {
+                    continuation.resume(throwing: CloudKitTransportError.incompleteZoneFetch)
+                } else if let error {
+                    continuation.resume(throwing: error)
                 } else {
                     continuation.resume(returning: CloudZoneChangeBatch(
-                        changedRecords: accumulator.changedRecords,
-                        deletedRecords: accumulator.deletedRecords,
-                        changeToken: accumulator.changeToken
+                        changedRecords: snapshot.changedRecords,
+                        deletedRecords: snapshot.deletedRecords,
+                        changeToken: snapshot.changeToken
                     ))
                 }
             }
@@ -59,11 +61,67 @@ actor CloudKitTransport {
     }
 }
 
-private final class ZoneChangeAccumulator: @unchecked Sendable {
-    var changedRecords: [CKRecord] = []
-    var deletedRecords: [(recordID: CKRecord.ID, recordType: String)] = []
-    var changeToken: CKServerChangeToken?
-    var zoneError: Error?
+final class ZoneChangeAccumulator: @unchecked Sendable {
+    struct Snapshot {
+        let changedRecords: [CKRecord]
+        let deletedRecords: [(recordID: CKRecord.ID, recordType: String)]
+        let changeToken: CKServerChangeToken?
+        let zoneError: Error?
+        let moreComing: Bool
+    }
+
+    private let lock = NSLock()
+    private var changedRecords: [CKRecord] = []
+    private var deletedRecords: [(recordID: CKRecord.ID, recordType: String)] = []
+    private var changeToken: CKServerChangeToken?
+    private var zoneError: Error?
+    private var moreComing = false
+
+    func addChanged(_ record: CKRecord) {
+        withLock { changedRecords.append(record) }
+    }
+
+    func addDeleted(recordID: CKRecord.ID, recordType: String) {
+        withLock { deletedRecords.append((recordID, recordType)) }
+    }
+
+    func updateToken(_ token: CKServerChangeToken?) {
+        withLock { if let token { changeToken = token } }
+    }
+
+    func finishZone(token: CKServerChangeToken?, moreComing: Bool, error: Error?) {
+        withLock {
+            if let token { changeToken = token }
+            self.moreComing = moreComing
+            if let error { zoneError = error }
+        }
+    }
+
+    func snapshot() -> Snapshot {
+        withLock {
+            Snapshot(
+                changedRecords: changedRecords,
+                deletedRecords: deletedRecords,
+                changeToken: moreComing ? nil : changeToken,
+                zoneError: zoneError,
+                moreComing: moreComing
+            )
+        }
+    }
+
+    private func withLock<T>(_ work: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return work()
+    }
+}
+
+enum CloudKitTransportError: LocalizedError {
+    case incompleteZoneFetch
+
+    var errorDescription: String? {
+        "CloudKit 尚未返回完整变更，已保留上一次同步位置，请稍后重试。"
+    }
 }
 
 enum CloudChangeTokenStore {
