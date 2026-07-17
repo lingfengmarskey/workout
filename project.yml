@@ -37,5 +37,26 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         TARGETED_DEVICE_FAMILY: "1"
-    scheme:
+  WorkoutTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: WorkoutTests
+    dependencies:
+      - target: Workout
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lingfengmarskey.workout.tests
+        GENERATE_INFOPLIST_FILE: true
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: E393H8D2JP
+schemes:
+  Workout:
+    build:
+      targets:
+        Workout: all
+        WorkoutTests: [test]
+    test:
       gatherCoverageData: false
+      targets:
+        - WorkoutTests

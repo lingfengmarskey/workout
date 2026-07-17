@@ -121,6 +121,7 @@ private enum PlanDisplayMode: String, CaseIterable, Identifiable {
 
 struct MealPlanDetailView: View {
     @Bindable var plan: DailyMealPlan
+    @State private var initialSyncFingerprint: String?
 
     var body: some View {
         Form {
@@ -188,6 +189,13 @@ struct MealPlanDetailView: View {
         }
         .navigationTitle("饮食计划")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { initialSyncFingerprint = syncFingerprint }
+        .onDisappear {
+            if initialSyncFingerprint != syncFingerprint {
+                plan.updatedAt = .now
+                plan.syncRevision += 1
+            }
+        }
     }
 
     private func mealSection(
@@ -225,6 +233,18 @@ struct MealPlanDetailView: View {
             }
         )
     }
+
+    private var syncFingerprint: String {
+        [
+            plan.breakfastStatusRaw,
+            plan.lunchStatusRaw,
+            plan.dinnerStatusRaw,
+            plan.snackStatusRaw,
+            plan.hungerLevel.map { String($0) } ?? "",
+            plan.actualWater.map { String($0) } ?? "",
+            plan.note
+        ].joined(separator: "|")
+    }
 }
 
 struct WorkoutPlanDetailView: View {
@@ -234,6 +254,7 @@ struct WorkoutPlanDetailView: View {
     @State private var importedSteps: Int?
     @State private var showOverwriteStepsConfirmation = false
     @State private var healthStepError: String?
+    @State private var initialSyncFingerprint: String?
 
     var body: some View {
         Form {
@@ -323,6 +344,13 @@ struct WorkoutPlanDetailView: View {
         }
         .navigationTitle("锻炼计划")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { initialSyncFingerprint = syncFingerprint }
+        .onDisappear {
+            if initialSyncFingerprint != syncFingerprint {
+                plan.updatedAt = .now
+                plan.syncRevision += 1
+            }
+        }
         .alert("覆盖当前步数？", isPresented: $showOverwriteStepsConfirmation) {
             Button("使用健康步数") {
                 if let importedSteps { plan.actualSteps = importedSteps }
@@ -374,5 +402,16 @@ struct WorkoutPlanDetailView: View {
                 plan[keyPath: keyPath] = Int(text)
             }
         )
+    }
+
+    private var syncFingerprint: String {
+        [
+            plan.statusRaw,
+            plan.actualDurationMinutes.map { String($0) } ?? "",
+            plan.actualSteps.map { String($0) } ?? "",
+            plan.fatigueLevel.map { String($0) } ?? "",
+            "\(plan.painDescription.utf8.count):\(plan.painDescription)",
+            "\(plan.note.utf8.count):\(plan.note)"
+        ].joined(separator: "|")
     }
 }

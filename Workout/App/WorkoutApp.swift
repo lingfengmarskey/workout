@@ -7,7 +7,7 @@ struct WorkoutApp: App {
     private let modelContainer: ModelContainer
 
     init() {
-        let schema = Schema(versionedSchema: WorkoutSchemaV1.self)
+        let schema = Schema(versionedSchema: WorkoutSchemaV2.self)
         let configuration = ModelConfiguration(schema: schema)
 
         do {
@@ -108,6 +108,7 @@ private struct BootstrapView: View {
 
                 do {
                     try SeedData.seedIfNeeded(in: modelContext)
+                    try PhotoHashBackfillService.runIfNeeded(in: modelContext)
                 } catch {
                     assertionFailure("Failed to seed initial data: \(error)")
                 }

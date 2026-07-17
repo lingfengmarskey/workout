@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import SwiftData
 import UIKit
 
@@ -28,7 +29,7 @@ final class BodyPhotoStore {
     }
 
     /// Stores a compressed JPEG in Application Support and returns only its opaque filename.
-    func save(imageData: Data, replacing oldIdentifier: String?) throws -> String {
+    func save(imageData: Data) throws -> String {
         guard let image = UIImage(data: imageData) else { throw StoreError.invalidImage }
         let normalized = image.normalizedForStorage(maxDimension: 2_000)
         guard let data = normalized.jpegData(compressionQuality: 0.82) else {
@@ -40,9 +41,6 @@ final class BodyPhotoStore {
         let destination = directory.appendingPathComponent(identifier, isDirectory: false)
         try data.write(to: destination, options: [.atomic, .completeFileProtection])
 
-        if let oldIdentifier {
-            try? delete(identifier: oldIdentifier)
-        }
         return identifier
     }
 
@@ -51,6 +49,13 @@ final class BodyPhotoStore {
               let url = try? photoURL(for: identifier),
               let data = try? Data(contentsOf: url) else { return nil }
         return UIImage(data: data)
+    }
+
+    func contentHash(for identifier: String?) -> String? {
+        guard let identifier,
+              let url = try? photoURL(for: identifier),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     func delete(identifier: String?) throws {
@@ -71,9 +76,11 @@ final class BodyPhotoStore {
 
     /// Use this entry point whenever a body record is removed so its files cannot be orphaned.
     func delete(record: DailyBodyRecord, from context: ModelContext) throws {
-        try deletePhotos(for: record)
+        let identifiers = [record.frontPhotoPath, record.sidePhotoPath, record.backPhotoPath]
+        try SyncDeletionService.stageDeletion(id: record.id, entityType: .bodyRecord, in: context)
         context.delete(record)
         try context.save()
+        identifiers.forEach { try? delete(identifier: $0) }
     }
 
     private func storageDirectory() throws -> URL {
