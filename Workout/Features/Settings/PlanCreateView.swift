@@ -41,7 +41,7 @@ struct PlanCreateView: View {
             }
 
             Section {
-                Text("创建后会自动生成 \(durationWeeks * 7) 天的身体记录、饮食和锻炼计划。当前进行中的计划会标记为已完成。")
+                Text("创建后会自动生成 \(durationWeeks * 7) 天的身体记录、饮食和锻炼计划。已有进行中计划时，请先由你手动暂停、完成或放弃该计划。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -83,13 +83,13 @@ struct PlanCreateView: View {
         guard (1_200...5_000).contains(dailyCalories) else { validationMessage = "每日热量请输入 1200–5000 kcal。"; return }
         guard (40...300).contains(dailyProtein) else { validationMessage = "每日蛋白质请输入 40–300 g。"; return }
         guard (0.5...6).contains(dailyWater) else { validationMessage = "每日饮水请输入 0.5–6 L。"; return }
+        guard !plans.contains(where: { $0.status == .active }) else {
+            validationMessage = "目前还有进行中的计划。请返回设置，由你亲自决定暂停、完成或放弃它，再创建新计划。"
+            return
+        }
 
         isSaving = true
         do {
-            plans.filter { $0.status == .active }.forEach {
-                $0.status = .completed
-                $0.updatedAt = .now
-            }
             let plan = WeightLossPlan(
                 name: trimmedName,
                 startDate: startDate,

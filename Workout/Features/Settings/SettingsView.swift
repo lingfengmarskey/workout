@@ -10,9 +10,11 @@ struct SettingsView: View {
 
     @State private var showTestDataConfirmation = false
     @State private var testDataMessage: String?
+    @State private var pendingStatus: PlanStatus?
+    @State private var statusFeedback: PlanStatusFeedback?
 
     private var activePlan: WeightLossPlan? {
-        plans.first(where: { $0.status == .active }) ?? plans.first
+        plans.first(where: { $0.status == .active })
     }
 
     private var historicalPlans: [WeightLossPlan] {
@@ -41,25 +43,38 @@ struct SettingsView: View {
                 }
 
                 Section("计划状态") {
-                    Picker(
-                        "状态",
-                        selection: Binding(
-                            get: { plan.status },
-                            set: { plan.status = $0; plan.updatedAt = .now }
-                        )
-                    ) {
-                        ForEach(PlanStatus.allCases) { status in
-                            Text(status.displayName).tag(status)
-                        }
+                    LabeledContent("当前状态", value: plan.status.displayName)
+                    Button {
+                        pendingStatus = .paused
+                    } label: {
+                        Label("暂停计划", systemImage: "pause.circle")
+                    }
+                    Button {
+                        pendingStatus = .completed
+                    } label: {
+                        Label("完成计划", systemImage: "trophy.fill")
+                    }
+                    Button(role: .destructive) {
+                        pendingStatus = .abandoned
+                    } label: {
+                        Label("放弃计划…", systemImage: "heart.slash")
                     }
                 }
+            } else {
+                Section("当前计划") {
+                    ContentUnavailableView(
+                        "没有进行中的计划",
+                        systemImage: "flag.checkered",
+                        description: Text("可以创建新计划，或从历史计划恢复一个暂停的计划。")
+                    )
+                }
+            }
 
-                Section {
-                    NavigationLink {
-                        PlanCreateView()
-                    } label: {
-                        Label("创建新计划", systemImage: "plus.circle.fill")
-                    }
+            Section {
+                NavigationLink {
+                    PlanCreateView()
+                } label: {
+                    Label("创建新计划", systemImage: "plus.circle.fill")
                 }
             }
 
@@ -115,6 +130,28 @@ struct SettingsView: View {
 #endif
         }
         .navigationTitle("设置")
+        .confirmationDialog(
+            pendingStatus?.confirmationTitle ?? "更改计划状态？",
+            isPresented: Binding(
+                get: { pendingStatus != nil },
+                set: { if !$0 { pendingStatus = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let pendingStatus {
+                Button(pendingStatus.confirmationButtonTitle, role: pendingStatus == .abandoned ? .destructive : nil) {
+                    applyStatus(pendingStatus)
+                }
+            }
+            Button("取消", role: .cancel) { pendingStatus = nil }
+        } message: {
+            Text(pendingStatus?.confirmationMessage ?? "")
+        }
+        .fullScreenCover(item: $statusFeedback) { feedback in
+            PlanStatusFeedbackView(feedback: feedback) {
+                statusFeedback = nil
+            }
+        }
 #if DEBUG
         .confirmationDialog("生成测试数据？", isPresented: $showTestDataConfirmation, titleVisibility: .visible) {
             Button("确认生成", role: .destructive) { generateTestData() }
@@ -135,6 +172,15 @@ struct SettingsView: View {
 
     private func formattedWeight(_ value: Double) -> String {
         "\(value.formatted(.number.precision(.fractionLength(1)))) kg"
+    }
+
+    private func applyStatus(_ status: PlanStatus) {
+        guard let plan = activePlan else { return }
+        plan.status = status
+        plan.updatedAt = .now
+        try? modelContext.save()
+        pendingStatus = nil
+        statusFeedback = PlanStatusFeedback(status: status, planName: plan.name)
     }
 
 #if DEBUG
