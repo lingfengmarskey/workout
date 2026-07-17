@@ -3,6 +3,7 @@ import SwiftData
 import SwiftUI
 
 struct ProgressDashboardView: View {
+    @ObservedObject var notificationRouter: NotificationNavigationRouter
     @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
     @Query(sort: \DailyBodyRecord.date) private var records: [DailyBodyRecord]
     @Query(sort: \DailyMealPlan.date) private var mealPlans: [DailyMealPlan]
@@ -64,7 +65,46 @@ struct ProgressDashboardView: View {
                 FullScreenWaistChartView(plan: plan, records: waistRecords)
             }
         }
+        .navigationDestination(item: validProgressNotificationDestination) { destination in
+            progressNotificationDestination(destination)
+        }
         .task { await loadChartsAfterFirstFrame() }
+    }
+
+    private var validProgressNotificationDestination: Binding<ProgressNotificationDestination?> {
+        Binding(
+            get: { activePlan == nil ? nil : notificationRouter.progressDestination },
+            set: { notificationRouter.progressDestination = $0 }
+        )
+    }
+
+    @ViewBuilder
+    private func progressNotificationDestination(_ destination: ProgressNotificationDestination) -> some View {
+        if let plan = activePlan {
+            switch destination {
+            case .photoHistory:
+                BodyPhotoHistoryView(plan: plan, records: photoRecords)
+            case .weeklyReview:
+                let summaries = WeeklyReviewCalculator.summaries(
+                    plan: plan,
+                    bodyRecords: records,
+                    mealPlans: mealPlans,
+                    workoutPlans: workoutPlans
+                )
+                if let summary = summaries.last {
+                    WeeklyReviewDetailView(
+                        summary: summary,
+                        plan: plan,
+                        mealPlans: mealPlans,
+                        workoutPlans: workoutPlans
+                    )
+                } else {
+                    ContentUnavailableView("还没有每周复盘", systemImage: "chart.line.uptrend.xyaxis")
+                }
+            }
+        } else {
+            ContentUnavailableView("没有进行中的计划", systemImage: "chart.xyaxis.line")
+        }
     }
 
     private func photoHistoryCard(plan: WeightLossPlan) -> some View {

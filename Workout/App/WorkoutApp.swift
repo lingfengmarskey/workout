@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct WorkoutApp: App {
+    @UIApplicationDelegateAdaptor(WorkoutAppDelegate.self) private var appDelegate
     private let modelContainer: ModelContainer
 
     init() {
@@ -22,20 +23,22 @@ struct WorkoutApp: App {
 
     var body: some Scene {
         WindowGroup {
-            BootstrapView()
+            BootstrapView(notificationRouter: appDelegate.notificationRouter)
         }
         .modelContainer(modelContainer)
     }
 }
 
 private struct BootstrapView: View {
+    @ObservedObject var notificationRouter: NotificationNavigationRouter
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Query(sort: \WeightLossPlan.startDate, order: .reverse) private var plans: [WeightLossPlan]
     @State private var didAttemptSeed = false
 
     var body: some View {
         ZStack {
-            RootView()
+            RootView(notificationRouter: notificationRouter)
 
             if scenePhase != .active {
                 PrivacyShieldView()
@@ -44,6 +47,12 @@ private struct BootstrapView: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: scenePhase)
+            .task(id: activePlanID) {
+                try? await LocalReminderService.reschedule(
+                    ReminderSettingsStore.load(),
+                    hasActivePlan: activePlanID != nil
+                )
+            }
             .task {
                 guard !didAttemptSeed else { return }
                 didAttemptSeed = true
@@ -54,6 +63,10 @@ private struct BootstrapView: View {
                     assertionFailure("Failed to seed initial data: \(error)")
                 }
             }
+    }
+
+    private var activePlanID: UUID? {
+        plans.first(where: { $0.status == .active })?.id
     }
 }
 

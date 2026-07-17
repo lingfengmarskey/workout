@@ -102,8 +102,15 @@ struct SettingsView: View {
                 }
             }
 
+            Section("提醒") {
+                NavigationLink {
+                    ReminderSettingsView()
+                } label: {
+                    Label("本地通知", systemImage: "bell.badge")
+                }
+            }
+
             Section("后续功能") {
-                Label("本地通知", systemImage: "bell")
                 Label("HealthKit 步数与体重", systemImage: "heart.text.square")
                 Label("iCloud 同步", systemImage: "icloud")
                 Label("Face ID", systemImage: "faceid")
