@@ -229,6 +229,11 @@ struct MealPlanDetailView: View {
 
 struct WorkoutPlanDetailView: View {
     @Bindable var plan: DailyWorkoutPlan
+    @AppStorage("healthkit.steps.authorizationRequested") private var healthAuthorizationRequested = false
+    @State private var isReadingHealthSteps = false
+    @State private var importedSteps: Int?
+    @State private var showOverwriteStepsConfirmation = false
+    @State private var healthStepError: String?
 
     var body: some View {
         Form {
@@ -271,6 +276,22 @@ struct WorkoutPlanDetailView: View {
 
                 TextField("实际步数", text: intBinding(\DailyWorkoutPlan.actualSteps))
                     .keyboardType(.numberPad)
+
+                if Calendar.current.isDateInToday(plan.date) {
+                    Button {
+                        Task { await importTodaySteps() }
+                    } label: {
+                        if isReadingHealthSteps {
+                            HStack {
+                                ProgressView()
+                                Text("正在读取健康步数…")
+                            }
+                        } else {
+                            Label("从健康 App 同步今日步数", systemImage: "heart.fill")
+                        }
+                    }
+                    .disabled(isReadingHealthSteps || !HealthKitStepService.isAvailable)
+                }
                 TextField("实际训练时长（分钟）", text: intBinding(\DailyWorkoutPlan.actualDurationMinutes))
                     .keyboardType(.numberPad)
 
@@ -302,6 +323,43 @@ struct WorkoutPlanDetailView: View {
         }
         .navigationTitle("锻炼计划")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("覆盖当前步数？", isPresented: $showOverwriteStepsConfirmation) {
+            Button("使用健康步数") {
+                if let importedSteps { plan.actualSteps = importedSteps }
+                importedSteps = nil
+            }
+            Button("取消", role: .cancel) { importedSteps = nil }
+        } message: {
+            Text("当前已记录 \(plan.actualSteps ?? 0) 步，健康 App 读取到 \(importedSteps ?? 0) 步。")
+        }
+        .alert("无法同步步数", isPresented: Binding(
+            get: { healthStepError != nil },
+            set: { if !$0 { healthStepError = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(healthStepError ?? "")
+        }
+    }
+
+    private func importTodaySteps() async {
+        isReadingHealthSteps = true
+        defer { isReadingHealthSteps = false }
+        do {
+            if !healthAuthorizationRequested {
+                try await HealthKitStepService.requestReadAuthorization()
+                healthAuthorizationRequested = true
+            }
+            let steps = try await HealthKitStepService.todaySteps()
+            if let current = plan.actualSteps, current != steps {
+                importedSteps = steps
+                showOverwriteStepsConfirmation = true
+            } else {
+                plan.actualSteps = steps
+            }
+        } catch {
+            healthStepError = error.localizedDescription
+        }
     }
 
     private func intBinding(
