@@ -58,6 +58,27 @@ final class BodyPhotoStore {
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
+    func fileURL(for identifier: String) throws -> URL {
+        let url = try photoURL(for: identifier)
+        guard fileManager.fileExists(atPath: url.path) else { throw CocoaError(.fileNoSuchFile) }
+        return url
+    }
+
+    /// Copies a downloaded CKAsset into protected app storage without
+    /// recompressing it. The caller supplies the hash advertised by WLPhoto;
+    /// mismatches are rejected before any model path is changed.
+    func installDownloadedAsset(from sourceURL: URL, expectedHash: String) throws -> String {
+        let data = try Data(contentsOf: sourceURL)
+        guard UIImage(data: data) != nil else { throw StoreError.invalidImage }
+        let actualHash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard actualHash == expectedHash else { throw BodyPhotoDownloadError.hashMismatch }
+
+        let identifier = "\(UUID().uuidString).jpg"
+        let destination = try storageDirectory().appendingPathComponent(identifier, isDirectory: false)
+        try data.write(to: destination, options: [.atomic, .completeFileProtection])
+        return identifier
+    }
+
     func delete(identifier: String?) throws {
         guard let identifier else { return }
         let url = try photoURL(for: identifier)
@@ -77,7 +98,17 @@ final class BodyPhotoStore {
     /// Use this entry point whenever a body record is removed so its files cannot be orphaned.
     func delete(record: DailyBodyRecord, from context: ModelContext) throws {
         let identifiers = [record.frontPhotoPath, record.sidePhotoPath, record.backPhotoPath]
-        try SyncDeletionService.stageDeletion(id: record.id, entityType: .bodyRecord, in: context)
+        let deletedAt = Date.now
+        try SyncDeletionService.stageDeletion(id: record.id, entityType: .bodyRecord, in: context, deletedAt: deletedAt)
+        for angle in CloudPhotoAngle.allCases {
+            try CloudPhotoSyncService.stageLocalMutation(
+                bodyID: record.id,
+                angle: angle,
+                contentHash: nil,
+                at: deletedAt,
+                in: context
+            )
+        }
         context.delete(record)
         try context.save()
         identifiers.forEach { try? delete(identifier: $0) }
@@ -109,6 +140,14 @@ final class BodyPhotoStore {
     private func photoURL(for identifier: String) throws -> URL {
         let safeIdentifier = URL(fileURLWithPath: identifier).lastPathComponent
         return try storageDirectory().appendingPathComponent(safeIdentifier, isDirectory: false)
+    }
+}
+
+enum BodyPhotoDownloadError: LocalizedError {
+    case hashMismatch
+
+    var errorDescription: String? {
+        "iCloud 照片校验失败，已保留本机原照片。"
     }
 }
 

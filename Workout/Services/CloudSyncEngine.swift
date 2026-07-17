@@ -41,11 +41,14 @@ final class CloudSyncEngine {
 
         do {
             let batch = try await fetchChangesRecoveringExpiredToken(state: state, context: context)
+            let photoRecords = batch.changedRecords.filter { $0.recordType == CloudRecordType.photo.rawValue }
+            let structuredRecords = batch.changedRecords.filter { $0.recordType != CloudRecordType.photo.rawValue }
             _ = try CloudRecordMergeService.apply(
-                changedRecords: batch.changedRecords,
+                changedRecords: structuredRecords,
                 deletedRecords: batch.deletedRecords,
                 in: context
             )
+            try CloudPhotoSyncService.applyDownloadedRecords(photoRecords, in: context)
 
             // Persist the token only after the corresponding changes have been
             // committed locally. A crash before this point safely replays them.
@@ -57,11 +60,17 @@ final class CloudSyncEngine {
                 state: state,
                 context: context
             )
+            try await CloudPhotoSyncService.uploadLocalPhotos(
+                changedSince: state.lastSuccessfulSyncAt,
+                state: state,
+                context: context
+            )
 
             state.lastSuccessfulSyncAt = syncStartedAt
             state.lastErrorSummary = nil
             state.phase = .ready
             state.pendingRecordCount = 0
+            state.pendingPhotoCount = 0
             try context.save()
         } catch {
             state.phase = .needsAttention

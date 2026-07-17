@@ -316,9 +316,18 @@ struct BodyRecordView: View {
         let oldHash = photoHash(for: angle)
         let identifier = try BodyPhotoStore.shared.save(imageData: data)
         setPhotoIdentifier(identifier, for: angle)
-        setPhotoHash(BodyPhotoStore.shared.contentHash(for: identifier), for: angle)
-        record.updatedAt = .now
+        let newHash = BodyPhotoStore.shared.contentHash(for: identifier)
+        setPhotoHash(newHash, for: angle)
+        let mutationDate = Date.now
+        record.updatedAt = mutationDate
         record.syncRevision += 1
+        try CloudPhotoSyncService.stageLocalMutation(
+            bodyID: record.id,
+            angle: CloudPhotoAngle(rawValue: angle.rawValue) ?? .front,
+            contentHash: newHash,
+            at: mutationDate,
+            in: modelContext
+        )
         do {
             try modelContext.save()
             try? BodyPhotoStore.shared.delete(identifier: oldIdentifier)
@@ -338,8 +347,16 @@ struct BodyRecordView: View {
         do {
             setPhotoIdentifier(nil, for: angle)
             setPhotoHash(nil, for: angle)
-            record.updatedAt = .now
+            let mutationDate = Date.now
+            record.updatedAt = mutationDate
             record.syncRevision += 1
+            try CloudPhotoSyncService.stageLocalMutation(
+                bodyID: record.id,
+                angle: CloudPhotoAngle(rawValue: angle.rawValue) ?? .front,
+                contentHash: nil,
+                at: mutationDate,
+                in: modelContext
+            )
             try modelContext.save()
             try? BodyPhotoStore.shared.delete(identifier: oldIdentifier)
             initialSyncFingerprint = syncFingerprint
