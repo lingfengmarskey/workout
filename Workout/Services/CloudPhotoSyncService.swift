@@ -141,6 +141,7 @@ enum CloudPhotoSyncService {
         angle: CloudPhotoAngle,
         contentHash: String?,
         at timestamp: Date,
+        deviceID: String = SyncDeviceIdentity.current,
         in context: ModelContext
     ) throws {
         let id = PhotoSyncMetadata.identifier(bodyID: bodyID, angle: angle)
@@ -158,7 +159,7 @@ enum CloudPhotoSyncService {
         }()
         item.contentHash = contentHash
         item.updatedAt = timestamp
-        item.deviceID = SyncDeviceIdentity.current
+        item.deviceID = deviceID
         item.isDeleted = contentHash == nil
     }
 

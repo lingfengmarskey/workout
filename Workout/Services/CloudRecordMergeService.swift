@@ -42,6 +42,7 @@ enum CloudRecordMergeService {
                     if try delete(
                         recordName: tombstone.recordName,
                         entityType: tombstone.entityType,
+                        tombstone: stored,
                         in: context,
                         photoIdentifiersToDelete: &photoIdentifiersToDelete
                     ) {
@@ -81,6 +82,7 @@ enum CloudRecordMergeService {
                     _ = try delete(
                         recordName: tombstone.recordName,
                         entityType: tombstone.entityType,
+                        tombstone: tombstone,
                         in: context,
                         photoIdentifiersToDelete: &photoIdentifiersToDelete
                     )
@@ -112,6 +114,7 @@ enum CloudRecordMergeService {
             } else if try delete(
                 recordName: deletion.recordID.recordName,
                 entityType: entityType,
+                tombstone: tombstone,
                 in: context,
                 photoIdentifiersToDelete: &photoIdentifiersToDelete
             ) {
@@ -341,6 +344,7 @@ enum CloudRecordMergeService {
     private static func delete(
         recordName: String,
         entityType: SyncEntityType,
+        tombstone: SyncTombstone?,
         in context: ModelContext,
         photoIdentifiersToDelete: inout [String]
     ) throws -> Bool {
@@ -350,6 +354,18 @@ enum CloudRecordMergeService {
             guard let model = try context.fetch(FetchDescriptor<WeightLossPlan>()).first(where: { $0.id == id }) else { return false }
             context.delete(model)
         case .bodyRecord:
+            if let tombstone {
+                for angle in CloudPhotoAngle.allCases {
+                    try CloudPhotoSyncService.stageLocalMutation(
+                        bodyID: id,
+                        angle: angle,
+                        contentHash: nil,
+                        at: tombstone.deletedAt,
+                        deviceID: tombstone.deviceID,
+                        in: context
+                    )
+                }
+            }
             guard let model = try context.fetch(FetchDescriptor<DailyBodyRecord>()).first(where: { $0.id == id }) else { return false }
             photoIdentifiersToDelete += [model.frontPhotoPath, model.sidePhotoPath, model.backPhotoPath].compactMap { $0 }
             context.delete(model)
