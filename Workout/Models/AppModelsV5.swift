@@ -112,6 +112,7 @@ extension WorkoutSchemaV5 {
         var actualProtein: Double? { sumOptional(actualFoodEntries.map(\.protein)) }
         var actualCarbohydrates: Double? { sumOptional(actualFoodEntries.map(\.carbohydrates)) }
         var actualFat: Double? { sumOptional(actualFoodEntries.map(\.fat)) }
+        var actualSodium: Double? { sumOptional(actualFoodEntries.map(\.sodium)) }
 
         private func sumOptional(_ values: [Double?]) -> Double? {
             guard values.contains(where: { $0 != nil }) else { return nil }

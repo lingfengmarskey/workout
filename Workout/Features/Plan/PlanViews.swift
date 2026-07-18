@@ -183,6 +183,9 @@ struct MealPlanDetailView: View {
                 if let fat = plan.actualFat {
                     LabeledContent("脂肪", value: formattedMacro(fat))
                 }
+                if let sodium = plan.actualSodium {
+                    LabeledContent("钠", value: formattedMacro(sodium, unit: "mg"))
+                }
                 LabeledContent(
                     "与计划差异",
                     value: formattedCalories(plan.actualCalories - Double(plan.plannedCalories), signed: true)
@@ -363,6 +366,9 @@ struct MealPlanDetailView: View {
                 if let protein = optionalTotal(entries.map(\.protein)) {
                     LabeledContent("本餐蛋白质", value: formattedMacro(protein))
                 }
+                if let sodium = optionalTotal(entries.map(\.sodium)) {
+                    LabeledContent("本餐钠", value: formattedMacro(sodium, unit: "mg"))
+                }
             }
 
             Button {
@@ -400,6 +406,9 @@ struct MealPlanDetailView: View {
             proteinPerBasis: template.proteinPerBasis,
             carbohydratesPerBasis: template.carbohydratesPerBasis,
             fatPerBasis: template.fatPerBasis,
+            sodiumPerBasis: template.sodiumPerBasis,
+            originalEnergyPerBasis: template.caloriesPerBasis,
+            originalEnergyUnit: .kcal,
             dataSource: .template,
             confidence: templateConfidenceScore(template.confidence),
             isConfirmed: true
@@ -432,6 +441,10 @@ struct MealPlanDetailView: View {
 
     private func formattedMacro(_ value: Double) -> String {
         "\(value.formatted(.number.precision(.fractionLength(0...1)))) g"
+    }
+
+    private func formattedMacro(_ value: Double, unit: String) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(0...1)))) \(unit)"
     }
 
     private func optionalTotal(_ values: [Double?]) -> Double? {
@@ -492,11 +505,14 @@ private struct ActualFoodEntryEditorView: View {
     @State private var amount: String
     @State private var unit: String
     @State private var basisAmount: String
-    @State private var calories: String
+    @State private var energyValue: String
+    @State private var energyUnit: FoodEnergyUnit
     @State private var protein: String
     @State private var carbohydrates: String
     @State private var fat: String
+    @State private var sodium: String
     @State private var saveAsTemplate: Bool
+    @State private var confirmedLowConfidence: Bool
     @State private var validationMessage: String?
 
     init(
@@ -513,11 +529,16 @@ private struct ActualFoodEntryEditorView: View {
         _amount = State(initialValue: entry.map { String($0.amount) } ?? "")
         _unit = State(initialValue: entry?.unit ?? "g")
         _basisAmount = State(initialValue: entry.map { String($0.nutritionBasisAmount) } ?? "100")
-        _calories = State(initialValue: entry.map { String($0.caloriesPerBasis) } ?? "")
+        _energyValue = State(initialValue: entry.map {
+            String($0.originalEnergyPerBasis ?? $0.caloriesPerBasis)
+        } ?? "")
+        _energyUnit = State(initialValue: entry?.originalEnergyUnit ?? .kcal)
         _protein = State(initialValue: entry?.proteinPerBasis.map { String($0) } ?? "")
         _carbohydrates = State(initialValue: entry?.carbohydratesPerBasis.map { String($0) } ?? "")
         _fat = State(initialValue: entry?.fatPerBasis.map { String($0) } ?? "")
+        _sodium = State(initialValue: entry?.sodiumPerBasis.map { String($0) } ?? "")
         _saveAsTemplate = State(initialValue: false)
+        _confirmedLowConfidence = State(initialValue: (entry?.confidence ?? 1) >= 1)
     }
 
     var body: some View {
@@ -536,18 +557,28 @@ private struct ActualFoodEntryEditorView: View {
                 Section {
                     TextField("营养基准数量，例如 100", text: $basisAmount)
                         .keyboardType(.decimalPad)
-                    TextField("每基准量能量（kcal）", text: $calories)
-                        .keyboardType(.decimalPad)
+                    HStack {
+                        TextField("每基准量能量", text: $energyValue)
+                            .keyboardType(.decimalPad)
+                        Picker("能量单位", selection: $energyUnit) {
+                            ForEach(FoodEnergyUnit.allCases) { item in
+                                Text(item.displayName).tag(item)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
                     TextField("蛋白质（g，可选）", text: $protein)
                         .keyboardType(.decimalPad)
                     TextField("碳水（g，可选）", text: $carbohydrates)
                         .keyboardType(.decimalPad)
                     TextField("脂肪（g，可选）", text: $fat)
                         .keyboardType(.decimalPad)
+                    TextField("钠（mg，可选）", text: $sodium)
+                        .keyboardType(.decimalPad)
                 } header: {
                     Text("营养快照")
                 } footer: {
-                    Text("例如：熟米饭 200 g；营养基准数量填 100，每基准量能量填 116。")
+                    Text("例如：熟米饭 200 g；营养基准数量填 100，每基准量能量填 116 kcal。也支持 kJ，保存时统一换算为 kcal。")
                 }
 
                 if entry == nil {
@@ -557,6 +588,14 @@ private struct ActualFoodEntryEditorView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                Section("数据来源") {
+                    LabeledContent("来源", value: sourceText(entry?.dataSource ?? .manual))
+                    LabeledContent("可信度", value: confidenceText(entry?.confidence ?? 1))
+                    Text("保存前可以修改名称、数量、基准和营养值；修改识别或模板数据后会转为手动快照。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -571,6 +610,9 @@ private struct ActualFoodEntryEditorView: View {
                         if let fat = previewMacro(self.fat) {
                             LabeledContent("脂肪", value: formattedMacro(fat))
                         }
+                        if let sodium = previewMacro(self.sodium) {
+                            LabeledContent("钠", value: formattedMacro(sodium, unit: "mg"))
+                        }
                     } else {
                         Text("输入实际数量、营养基准数量和能量后显示估算结果。")
                             .foregroundStyle(.secondary)
@@ -578,15 +620,24 @@ private struct ActualFoodEntryEditorView: View {
                 } header: {
                     Text("本条估算")
                 }
+
+                if let confidence = entry?.confidence, confidence < 1 {
+                    Section("识别结果确认") {
+                        Text("这条记录的营养数据可信度为\(confidenceText(confidence))，请核对包装或手动修正后再保存。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Toggle("我已核对以上营养数据", isOn: $confirmedLowConfidence)
+                    }
+                }
             }
-            .navigationTitle(entry == nil ? "添加实际进食" : "编辑实际进食")
+            .navigationTitle("确认实际进食")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
+                    Button("确认并保存") { save() }
                 }
             }
             .alert("无法保存", isPresented: Binding(
@@ -605,36 +656,72 @@ private struct ActualFoodEntryEditorView: View {
         let normalizedUnit = unit.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { validationMessage = "请输入食物名称。"; return }
         guard !normalizedUnit.isEmpty else { validationMessage = "请输入数量单位。"; return }
+        guard let actualUnit = FoodNutritionBasisUnit.parse(normalizedUnit) else {
+            validationMessage = "数量单位必须是 g、ml、份或包装。"
+            return
+        }
         guard let amountValue = parsePositive(amount),
               let basisValue = parsePositive(basisAmount) else {
             validationMessage = "实际数量和营养基准数量必须是大于 0 的数字。"
             return
         }
-        guard let calorieValue = parseNonNegative(calories) else {
+        guard let energyInput = parseNonNegative(energyValue) else {
             validationMessage = "每基准量能量必须是 0 或更大的数字。"
             return
         }
-        guard [protein, carbohydrates, fat].allSatisfy(isValidOptionalNumber) else {
-            validationMessage = "蛋白质、碳水和脂肪必须是 0 或更大的数字，或留空。"
+        guard [protein, carbohydrates, fat, sodium].allSatisfy(isValidOptionalNumber) else {
+            validationMessage = "蛋白质、碳水、脂肪和钠必须是 0 或更大的数字，或留空。"
+            return
+        }
+        guard confirmedLowConfidence else {
+            validationMessage = "请先核对低可信度的营养数据。"
+            return
+        }
+
+        let calorieValue = energyUnit.calories(from: energyInput)
+        guard calorieValue.isFinite else {
+            validationMessage = "能量换算失败，请检查输入。"
+            return
+        }
+
+        if let entry, let templateID = entry.templateID,
+           let templates = try? modelContext.fetch(FetchDescriptor<FoodTemplate>()),
+           let template = templates.first(where: { $0.id == templateID }),
+           let templateUnit = FoodNutritionBasisUnit(rawValue: template.basisUnitRaw),
+           templateUnit != actualUnit {
+            validationMessage = "本次数量单位必须与模板营养基准一致（\(templateUnit.displayName)）。"
             return
         }
 
         var templateID = entry?.templateID
         var source = entry?.dataSource ?? .manual
+        var confidence = entry?.confidence
+        let nutritionChanged = entry.map {
+            $0.foodName != name
+                || $0.unit != normalizedUnit
+                || $0.nutritionBasisAmount != basisValue
+                || ($0.originalEnergyPerBasis ?? $0.caloriesPerBasis) != energyInput
+                || $0.originalEnergyUnit != energyUnit
+                || $0.proteinPerBasis != parseOptionalNonNegative(protein)
+                || $0.carbohydratesPerBasis != parseOptionalNonNegative(carbohydrates)
+                || $0.fatPerBasis != parseOptionalNonNegative(fat)
+                || $0.sodiumPerBasis != parseOptionalNonNegative(sodium)
+        } ?? false
+        if nutritionChanged, source != .manual {
+            source = .manual
+            confidence = 1
+            templateID = nil
+        }
         if saveAsTemplate {
-            guard let templateUnit = templateUnit(for: normalizedUnit) else {
-                validationMessage = "保存为模板时，单位必须是 g、ml、份或包装。"
-                return
-            }
-
             let template = FoodTemplate(
                 name: name,
                 basisAmount: basisValue,
-                basisUnit: templateUnit,
+                basisUnit: actualUnit,
                 caloriesPerBasis: calorieValue,
                 proteinPerBasis: parseOptionalNonNegative(protein),
                 fatPerBasis: parseOptionalNonNegative(fat),
                 carbohydratesPerBasis: parseOptionalNonNegative(carbohydrates),
+                sodiumPerBasis: parseOptionalNonNegative(sodium),
                 source: .manual,
                 confidence: .high
             )
@@ -663,9 +750,12 @@ private struct ActualFoodEntryEditorView: View {
             proteinPerBasis: parseOptionalNonNegative(protein),
             carbohydratesPerBasis: parseOptionalNonNegative(carbohydrates),
             fatPerBasis: parseOptionalNonNegative(fat),
+            sodiumPerBasis: parseOptionalNonNegative(sodium),
+            originalEnergyPerBasis: energyInput,
+            originalEnergyUnit: energyUnit,
             dataSource: source,
-            confidence: entry?.confidence,
-            isConfirmed: true
+            confidence: confidence,
+            isConfirmed: confirmedLowConfidence
         )
         onSave(result)
         dismiss()
@@ -687,21 +777,11 @@ private struct ActualFoodEntryEditorView: View {
         return parseNonNegative(text)
     }
 
-    private func templateUnit(for text: String) -> FoodNutritionBasisUnit? {
-        switch text.lowercased() {
-        case "g", "克", "gram", "grams": .gram
-        case "ml", "毫升", "milliliter", "milliliters": .milliliter
-        case "份", "serving", "servings": .serving
-        case "包装", "package", "packages": .package
-        default: nil
-        }
-    }
-
     private var previewCalories: Double? {
         guard let amountValue = parsePositive(amount),
               let basisValue = parsePositive(basisAmount),
-              let calorieValue = parseNonNegative(calories) else { return nil }
-        return max(0, calorieValue * amountValue / basisValue)
+              let parsedEnergy = parseNonNegative(energyValue) else { return nil }
+        return max(0, energyUnit.calories(from: parsedEnergy) * amountValue / basisValue)
     }
 
     private func formattedCalories(_ value: Double) -> String {
@@ -710,6 +790,30 @@ private struct ActualFoodEntryEditorView: View {
 
     private func formattedMacro(_ value: Double) -> String {
         "\(value.formatted(.number.precision(.fractionLength(0...1)))) g"
+    }
+
+    private func formattedMacro(_ value: Double, unit: String) -> String {
+        "\(value.formatted(.number.precision(.fractionLength(0...1)))) \(unit)"
+    }
+
+    private func confidenceText(_ value: Double) -> String {
+        switch value {
+        case ..<0.5: "低"
+        case ..<1: "中"
+        default: "高"
+        }
+    }
+
+    private func sourceText(_ source: FoodDataSource) -> String {
+        switch source {
+        case .manual: "手动输入"
+        case .planned: "计划食物"
+        case .template: "食物模板"
+        case .barcodeDatabase: "条码数据库"
+        case .labelOCR: "营养表 OCR"
+        case .photoEstimate: "照片估算"
+        case .database: "旧版数据库"
+        }
     }
 
     private func previewMacro(_ text: String) -> Double? {
