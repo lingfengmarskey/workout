@@ -42,6 +42,30 @@ enum FoodTemplateConfidence: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum FoodTemplateListFilter: String, CaseIterable, Identifiable {
+    case recent
+    case favorites
+    case all
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .recent: "最近使用"
+        case .favorites: "收藏"
+        case .all: "全部"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .recent: "clock"
+        case .favorites: "star"
+        case .all: "square.grid.2x2"
+        }
+    }
+}
+
 enum FoodTemplateValidationError: LocalizedError, Equatable {
     case emptyName
     case invalidBasisAmount
@@ -106,5 +130,49 @@ enum FoodTemplateValidation {
         guard value.isFinite, value >= 0 else {
             throw FoodTemplateValidationError.invalidNutrient(name)
         }
+    }
+}
+
+enum FoodTemplateCatalog {
+    static let defaultRecentLimit = 12
+
+    static func visibleTemplates(
+        from templates: [FoodTemplate],
+        filter: FoodTemplateListFilter,
+        query: String,
+        recentLimit: Int = defaultRecentLimit
+    ) -> [FoodTemplate] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matching = templates.filter { template in
+            guard normalizedQuery.isEmpty else {
+                return template.name.localizedCaseInsensitiveContains(normalizedQuery)
+                    || template.brand.localizedCaseInsensitiveContains(normalizedQuery)
+                    || (template.barcode?.localizedCaseInsensitiveContains(normalizedQuery) ?? false)
+            }
+            return true
+        }
+
+        let filtered: [FoodTemplate]
+        switch filter {
+        case .recent:
+            filtered = matching.sorted { lhs, rhs in
+                (lhs.lastUsedAt ?? .distantPast) > (rhs.lastUsedAt ?? .distantPast)
+            }
+        case .favorites:
+            filtered = matching
+                .filter(\.isFavorite)
+                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        case .all:
+            filtered = matching.sorted { lhs, rhs in
+                let lhsDate = lhs.lastUsedAt ?? lhs.updatedAt
+                let rhsDate = rhs.lastUsedAt ?? rhs.updatedAt
+                return lhsDate > rhsDate
+            }
+        }
+
+        guard filter == .recent, normalizedQuery.isEmpty, recentLimit >= 0 else {
+            return filtered
+        }
+        return Array(filtered.prefix(recentLimit))
     }
 }

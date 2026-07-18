@@ -94,4 +94,37 @@ final class FoodTemplateTests: XCTestCase {
             XCTAssertEqual(error as? FoodTemplateValidationError, .unsupportedConfidence)
         }
     }
+
+    func testCatalogSortsRecentTemplatesAndAppliesDefaultLimit() {
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        let old = FoodTemplate(
+            name: "旧模板", basisAmount: 100, basisUnit: .gram, caloriesPerBasis: 100,
+            lastUsedAt: base
+        )
+        let newest = FoodTemplate(
+            name: "新模板", basisAmount: 100, basisUnit: .gram, caloriesPerBasis: 100,
+            lastUsedAt: base.addingTimeInterval(60)
+        )
+
+        let visible = FoodTemplateCatalog.visibleTemplates(
+            from: [old, newest], filter: .recent, query: "", recentLimit: 1
+        )
+        XCTAssertEqual(visible.map(\.name), ["新模板"])
+    }
+
+    func testCatalogFiltersFavoritesAndSearchesBrand() {
+        let favorite = FoodTemplate(
+            name: "鸡胸肉", brand: "家庭食谱", basisAmount: 100,
+            basisUnit: .gram, caloriesPerBasis: 165, isFavorite: true
+        )
+        let other = FoodTemplate(
+            name: "熟米饭", brand: "另一份食谱", basisAmount: 100,
+            basisUnit: .gram, caloriesPerBasis: 116
+        )
+
+        let visible = FoodTemplateCatalog.visibleTemplates(
+            from: [favorite, other], filter: .favorites, query: "家庭"
+        )
+        XCTAssertEqual(visible.map(\.name), ["鸡胸肉"])
+    }
 }
