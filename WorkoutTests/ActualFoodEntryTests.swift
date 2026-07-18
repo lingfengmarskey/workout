@@ -75,4 +75,21 @@ final class ActualFoodEntryTests: XCTestCase {
         XCTAssertEqual(entry.multiplier, 0)
         XCTAssertEqual(entry.calories, 0)
     }
+
+    func testTemplateReferenceDoesNotReplaceNutritionSnapshot() {
+        let templateID = UUID()
+        let entry = ActualFoodEntry(
+            templateID: templateID,
+            mealSlot: .lunch,
+            foodName: "熟米饭",
+            amount: 200,
+            unit: "g",
+            nutritionBasisAmount: 100,
+            caloriesPerBasis: 116,
+            proteinPerBasis: 2.6
+        )
+
+        XCTAssertEqual(entry.templateID, templateID)
+        XCTAssertEqual(entry.calories, 232, accuracy: 0.0001)
+    }
 }
