@@ -119,6 +119,59 @@ final class WorkoutSchemaMigrationTests: XCTestCase {
         XCTAssertEqual(meal.actualFoodEntriesJSON, "[]")
     }
 
+    func testMigratesV5StoreToV6AndAddsFoodTemplateTable() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("workout-v6-food-template-migration-\(UUID().uuidString).store")
+        defer { removeStoreFiles(at: storeURL) }
+
+        let planID = UUID()
+        let mealID = UUID()
+        let food = ActualFoodEntry(
+            mealSlot: .lunch,
+            foodName: "熟米饭",
+            amount: 200,
+            unit: "g",
+            nutritionBasisAmount: 100,
+            caloriesPerBasis: 116,
+            proteinPerBasis: 2.6
+        )
+
+        try autoreleasepool {
+            let schema = Schema(versionedSchema: WorkoutSchemaV5.self)
+            let configuration = ModelConfiguration("V6FoodTemplateMigrationTest", schema: schema, url: storeURL)
+            let context = ModelContext(try ModelContainer(for: schema, configurations: [configuration]))
+            let meal = WorkoutSchemaV5.DailyMealPlan(
+                id: mealID,
+                planID: planID,
+                date: .now,
+                breakfast: "早餐",
+                lunch: "午餐",
+                dinner: "晚餐",
+                snack: "加餐",
+                plannedCalories: 1_900,
+                plannedProtein: 140,
+                waterTarget: 2.2
+            )
+            meal.actualFoodEntries = [food]
+            context.insert(meal)
+            try context.save()
+        }
+
+        let schema = Schema(versionedSchema: WorkoutSchemaV6.self)
+        let configuration = ModelConfiguration("V6FoodTemplateMigrationTest", schema: schema, url: storeURL)
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: [configuration]
+        )
+        let context = ModelContext(container)
+
+        let meal = try XCTUnwrap(context.fetch(FetchDescriptor<WorkoutSchemaV5.DailyMealPlan>()).first)
+        XCTAssertEqual(meal.id, mealID)
+        XCTAssertEqual(meal.actualFoodEntries, [food])
+        XCTAssertTrue(try context.fetch(FetchDescriptor<WorkoutSchemaV6.FoodTemplate>()).isEmpty)
+    }
+
     func testMigratesV1StoreToV2WithoutLosingExistingRecords() throws {
         let storeURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("workout-migration-\(UUID().uuidString).store")

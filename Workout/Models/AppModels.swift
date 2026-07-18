@@ -62,12 +62,19 @@ enum MealSlot: String, Codable, CaseIterable, Identifiable {
 enum FoodDataSource: String, Codable {
     case manual
     case planned
+    case template
+    case barcodeDatabase
+    case labelOCR
     case photoEstimate
+    /// Kept for snapshots written by the first actual-food implementation.
     case database
 }
 
 struct ActualFoodEntry: Codable, Equatable, Identifiable {
     var id: UUID
+    /// Optional link to the template used to create this entry. Nutrition fields
+    /// below remain the immutable snapshot and must not be recomputed from it.
+    var templateID: UUID?
     var mealSlot: MealSlot
     var foodName: String
     var amount: Double
@@ -83,6 +90,7 @@ struct ActualFoodEntry: Codable, Equatable, Identifiable {
 
     init(
         id: UUID = UUID(),
+        templateID: UUID? = nil,
         mealSlot: MealSlot,
         foodName: String,
         amount: Double,
@@ -97,6 +105,7 @@ struct ActualFoodEntry: Codable, Equatable, Identifiable {
         isConfirmed: Bool = true
     ) {
         self.id = id
+        self.templateID = templateID
         self.mealSlot = mealSlot
         self.foodName = foodName
         self.amount = amount
@@ -349,13 +358,14 @@ final class DailyWorkoutPlan {
 }
 
 // Keep feature code independent of the active schema namespace. The current
-// store is V5; older namespaces remain available only to migration code.
+// store is V6; older namespaces remain available only to migration code.
 typealias WeightLossPlan = WorkoutSchemaV4.WeightLossPlan
 typealias DailyBodyRecord = WorkoutSchemaV4.DailyBodyRecord
 typealias DailyMealPlan = WorkoutSchemaV5.DailyMealPlan
 typealias DailyWorkoutPlan = WorkoutSchemaV4.DailyWorkoutPlan
 typealias SyncTombstone = WorkoutSchemaV4.SyncTombstone
 typealias CloudSyncState = WorkoutSchemaV4.CloudSyncState
+typealias FoodTemplate = WorkoutSchemaV6.FoodTemplate
 
 extension WeightLossPlan {
     /// Best available body weight for a given day: the most recent recorded
