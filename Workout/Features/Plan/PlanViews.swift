@@ -81,7 +81,7 @@ struct PlanOverviewView: View {
                                     .font(.headline)
 
                                 NavigationLink {
-                                    MealPlanDetailView(plan: meal)
+                                    MealPlanDetailView(plan: meal, bodyWeight: plan.effectiveWeight(on: meal.date, from: bodyRecords))
                                 } label: {
                                     Label(
                                         "饮食 · \(meal.plannedCalories) kcal · \(meal.completedMealCount)/4",
@@ -124,6 +124,8 @@ private enum PlanDisplayMode: String, CaseIterable, Identifiable {
 
 struct MealPlanDetailView: View {
     @Bindable var plan: DailyMealPlan
+    /// Body weight (kg) used to convert energy into equivalent activity time.
+    var bodyWeight: Double
     @State private var initialSyncFingerprint: String?
     @State private var editorRequest: ActualFoodEntryEditorRequest?
 
@@ -191,6 +193,10 @@ struct MealPlanDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if plan.actualCalories > 0 {
+                equivalentActivitySection
+            }
+
             Section("全天目标") {
                 LabeledContent("热量", value: "\(plan.plannedCalories) kcal")
                 LabeledContent("蛋白质", value: "\(plan.plannedProtein) g")
@@ -236,6 +242,50 @@ struct MealPlanDetailView: View {
                 onSave: upsertActualFoodEntry
             )
         }
+    }
+
+    @ViewBuilder
+    private var equivalentActivitySection: some View {
+        let suggestions = EquivalentActivityCalculator.suggestions(
+            forCalories: plan.actualCalories,
+            weightKg: bodyWeight
+        )
+
+        Section("等效活动参考（估算）") {
+            if suggestions.isEmpty {
+                Text("记录实际进食后显示等效活动参考。")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(suggestions, id: \.name) { activity in
+                    LabeledContent {
+                        Text(activityIntervalText(activity))
+                            .foregroundStyle(.secondary)
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(activity.name)
+                                Text(activity.impact.displayName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: activity.systemImage)
+                        }
+                    }
+                }
+
+                Text("等效活动参考仅供换算，实际消耗会受体重、速度、坡度、技术和设备影响。这不是必须完成的运动，也不建议靠运动抵消进食。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func activityIntervalText(_ activity: EquivalentActivity) -> String {
+        if activity.minMinutes == activity.maxMinutes {
+            return "约 \(activity.minMinutes) 分钟"
+        }
+        return "约 \(activity.minMinutes)～\(activity.maxMinutes) 分钟"
     }
 
     private func mealSection(

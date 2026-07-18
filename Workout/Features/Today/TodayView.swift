@@ -29,7 +29,7 @@ struct TodayView: View {
 
                         if let meal = todayMealPlan(for: plan) {
                             NavigationLink {
-                                MealPlanDetailView(plan: meal)
+                                MealPlanDetailView(plan: meal, bodyWeight: plan.effectiveWeight(on: meal.date, from: bodyRecords))
                             } label: {
                                 mealCard(meal)
                             }
@@ -85,7 +85,7 @@ struct TodayView: View {
                 }
             case .mealRecord:
                 if let meal = todayMealPlan(for: plan) {
-                    MealPlanDetailView(plan: meal)
+                    MealPlanDetailView(plan: meal, bodyWeight: plan.effectiveWeight(on: meal.date, from: bodyRecords))
                 } else {
                     missingTodayRecord("今天没有饮食计划", systemImage: "fork.knife")
                 }

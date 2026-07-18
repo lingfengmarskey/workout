@@ -238,7 +238,14 @@ struct DayPlanSummaryView: View {
     var body: some View {
         List {
             if let bodyRecord { NavigationLink("身体记录") { BodyRecordView(record: bodyRecord, plan: plan) } }
-            if let mealPlan { NavigationLink("饮食计划") { MealPlanDetailView(plan: mealPlan) } }
+            if let mealPlan {
+                NavigationLink("饮食计划") {
+                    MealPlanDetailView(
+                        plan: mealPlan,
+                        bodyWeight: plan.effectiveWeight(on: mealPlan.date, from: [bodyRecord].compactMap { $0 })
+                    )
+                }
+            }
             if let workoutPlan { NavigationLink("锻炼计划") { WorkoutPlanDetailView(plan: workoutPlan) } }
         }
         .navigationTitle(date.formatted(date: .complete, time: .omitted))
