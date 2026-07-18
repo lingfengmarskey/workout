@@ -84,6 +84,12 @@ struct ActualFoodEntry: Codable, Equatable, Identifiable {
     var proteinPerBasis: Double?
     var carbohydratesPerBasis: Double?
     var fatPerBasis: Double?
+    /// Sodium in the same nutrition basis as the other optional nutrients.
+    var sodiumPerBasis: Double?
+    /// Original energy input retained for auditability. `caloriesPerBasis` is
+    /// always normalized to kcal for calculations and historical snapshots.
+    var originalEnergyPerBasis: Double?
+    var originalEnergyUnitRaw: String?
     var dataSource: FoodDataSource
     var confidence: Double?
     var isConfirmed: Bool
@@ -100,6 +106,9 @@ struct ActualFoodEntry: Codable, Equatable, Identifiable {
         proteinPerBasis: Double? = nil,
         carbohydratesPerBasis: Double? = nil,
         fatPerBasis: Double? = nil,
+        sodiumPerBasis: Double? = nil,
+        originalEnergyPerBasis: Double? = nil,
+        originalEnergyUnit: FoodEnergyUnit? = nil,
         dataSource: FoodDataSource = .manual,
         confidence: Double? = nil,
         isConfirmed: Bool = true
@@ -115,6 +124,9 @@ struct ActualFoodEntry: Codable, Equatable, Identifiable {
         self.proteinPerBasis = proteinPerBasis
         self.carbohydratesPerBasis = carbohydratesPerBasis
         self.fatPerBasis = fatPerBasis
+        self.sodiumPerBasis = sodiumPerBasis
+        self.originalEnergyPerBasis = originalEnergyPerBasis
+        self.originalEnergyUnitRaw = originalEnergyUnit?.rawValue
         self.dataSource = dataSource
         self.confidence = confidence
         self.isConfirmed = isConfirmed
@@ -129,6 +141,12 @@ struct ActualFoodEntry: Codable, Equatable, Identifiable {
     var protein: Double? { proteinPerBasis.map { max(0, $0 * multiplier) } }
     var carbohydrates: Double? { carbohydratesPerBasis.map { max(0, $0 * multiplier) } }
     var fat: Double? { fatPerBasis.map { max(0, $0 * multiplier) } }
+    var sodium: Double? { sodiumPerBasis.map { max(0, $0 * multiplier) } }
+
+    var originalEnergyUnit: FoodEnergyUnit {
+        get { FoodEnergyUnit(rawValue: originalEnergyUnitRaw ?? "") ?? .kcal }
+        set { originalEnergyUnitRaw = newValue.rawValue }
+    }
 }
 
 extension WorkoutSchemaV1 {

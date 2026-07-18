@@ -127,4 +127,11 @@ final class FoodTemplateTests: XCTestCase {
         )
         XCTAssertEqual(visible.map(\.name), ["鸡胸肉"])
     }
+
+    func testNutritionUnitsAcceptLocalizedAliases() {
+        XCTAssertEqual(FoodNutritionBasisUnit.parse("克"), .gram)
+        XCTAssertEqual(FoodNutritionBasisUnit.parse("milliliters"), .milliliter)
+        XCTAssertEqual(FoodNutritionBasisUnit.parse("份"), .serving)
+        XCTAssertNil(FoodNutritionBasisUnit.parse("cup"))
+    }
 }

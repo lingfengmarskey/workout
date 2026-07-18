@@ -18,6 +18,32 @@ enum FoodNutritionBasisUnit: String, Codable, CaseIterable, Identifiable {
         case .package: "包装"
         }
     }
+
+    static func parse(_ text: String) -> Self? {
+        switch text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "g", "克", "gram", "grams": .gram
+        case "ml", "毫升", "milliliter", "milliliters": .milliliter
+        case "份", "serving", "servings": .serving
+        case "包装", "package", "packages": .package
+        default: nil
+        }
+    }
+}
+
+enum FoodEnergyUnit: String, Codable, CaseIterable, Identifiable {
+    case kcal
+    case kJ
+
+    var id: String { rawValue }
+
+    var displayName: String { rawValue }
+
+    func calories(from value: Double) -> Double {
+        switch self {
+        case .kcal: value
+        case .kJ: value / 4.184
+        }
+    }
 }
 
 /// Where the nutrition values for a template came from. Recognition and

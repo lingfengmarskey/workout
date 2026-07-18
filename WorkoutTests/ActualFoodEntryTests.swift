@@ -76,6 +76,50 @@ final class ActualFoodEntryTests: XCTestCase {
         XCTAssertEqual(entry.calories, 0)
     }
 
+    func testEnergyUnitConvertsKilojoulesToKcal() {
+        XCTAssertEqual(FoodEnergyUnit.kJ.calories(from: 418.4), 100, accuracy: 0.0001)
+
+        let entry = ActualFoodEntry(
+            mealSlot: .lunch,
+            foodName: "测试食品",
+            amount: 100,
+            unit: "g",
+            nutritionBasisAmount: 100,
+            caloriesPerBasis: FoodEnergyUnit.kJ.calories(from: 418.4),
+            originalEnergyPerBasis: 418.4,
+            originalEnergyUnit: .kJ
+        )
+
+        XCTAssertEqual(entry.calories, 100, accuracy: 0.0001)
+        XCTAssertEqual(entry.originalEnergyPerBasis, 418.4, accuracy: 0.0001)
+        XCTAssertEqual(entry.originalEnergyUnit, .kJ)
+    }
+
+    func testSodiumIsScaledWithTheNutritionBasis() {
+        let entry = ActualFoodEntry(
+            mealSlot: .dinner,
+            foodName: "测试食品",
+            amount: 200,
+            unit: "g",
+            nutritionBasisAmount: 100,
+            caloriesPerBasis: 100,
+            sodiumPerBasis: 180
+        )
+
+        XCTAssertEqual(entry.sodium ?? -1, 360, accuracy: 0.0001)
+    }
+
+    func testLegacySnapshotWithoutNewOptionalFieldsStillDecodes() throws {
+        let legacy = """
+        {"id":"00000000-0000-0000-0000-000000000001","mealSlot":"lunch","foodName":"熟米饭","amount":200,"unit":"g","nutritionBasisAmount":100,"caloriesPerBasis":116,"dataSource":"manual","isConfirmed":true}
+        """
+        let entry = try JSONDecoder().decode(ActualFoodEntry.self, from: Data(legacy.utf8))
+
+        XCTAssertNil(entry.sodiumPerBasis)
+        XCTAssertEqual(entry.originalEnergyUnit, .kcal)
+        XCTAssertEqual(entry.calories, 232, accuracy: 0.0001)
+    }
+
     func testTemplateReferenceDoesNotReplaceNutritionSnapshot() {
         let templateID = UUID()
         let entry = ActualFoodEntry(
