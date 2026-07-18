@@ -124,10 +124,13 @@ private enum PlanDisplayMode: String, CaseIterable, Identifiable {
 
 struct MealPlanDetailView: View {
     @Bindable var plan: DailyMealPlan
+    @Environment(\.modelContext) private var modelContext
+    @Query private var foodTemplates: [FoodTemplate]
     /// Body weight (kg) used to convert energy into equivalent activity time.
     var bodyWeight: Double
     @State private var initialSyncFingerprint: String?
     @State private var editorRequest: ActualFoodEntryEditorRequest?
+    @State private var templatePickerSlot: MealSlot?
 
     var body: some View {
         Form {
@@ -239,7 +242,26 @@ struct MealPlanDetailView: View {
             ActualFoodEntryEditorView(
                 entry: request.entry,
                 mealSlot: request.mealSlot,
-                onSave: upsertActualFoodEntry
+                onSave: upsertActualFoodEntry,
+                modelContext: modelContext
+            )
+        }
+        .sheet(item: $templatePickerSlot) { slot in
+            FoodTemplatePickerView(
+                mealSlot: slot,
+                onSelect: { template in
+                    template.markUsed()
+                    templatePickerSlot = nil
+                    let request = ActualFoodEntryEditorRequest(
+                        entry: draftEntry(from: template, mealSlot: slot), mealSlot: slot
+                    )
+                    DispatchQueue.main.async { editorRequest = request }
+                },
+                onManualEntry: {
+                    templatePickerSlot = nil
+                    let request = ActualFoodEntryEditorRequest(entry: nil, mealSlot: slot)
+                    DispatchQueue.main.async { editorRequest = request }
+                }
             )
         }
     }
@@ -344,7 +366,7 @@ struct MealPlanDetailView: View {
             }
 
             Button {
-                editorRequest = ActualFoodEntryEditorRequest(entry: nil, mealSlot: slot)
+                templatePickerSlot = slot
             } label: {
                 Label("添加实际进食", systemImage: "plus.circle")
             }
@@ -359,7 +381,37 @@ struct MealPlanDetailView: View {
             entries.append(entry)
         }
         plan.actualFoodEntries = entries
+        if let templateID = entry.templateID,
+           let template = foodTemplates.first(where: { $0.id == templateID }) {
+            template.markUsed()
+        }
         markMealAsChanged()
+    }
+
+    private func draftEntry(from template: FoodTemplate, mealSlot: MealSlot) -> ActualFoodEntry {
+        ActualFoodEntry(
+            templateID: template.id,
+            mealSlot: mealSlot,
+            foodName: template.name,
+            amount: template.basisAmount,
+            unit: template.basisUnit.rawValue,
+            nutritionBasisAmount: template.basisAmount,
+            caloriesPerBasis: template.caloriesPerBasis,
+            proteinPerBasis: template.proteinPerBasis,
+            carbohydratesPerBasis: template.carbohydratesPerBasis,
+            fatPerBasis: template.fatPerBasis,
+            dataSource: .template,
+            confidence: templateConfidenceScore(template.confidence),
+            isConfirmed: true
+        )
+    }
+
+    private func templateConfidenceScore(_ confidence: FoodTemplateConfidence) -> Double {
+        switch confidence {
+        case .high: 1
+        case .medium: 0.5
+        case .low: 0.25
+        }
     }
 
     private func removeActualFoodEntry(_ entry: ActualFoodEntry) {
@@ -434,6 +486,7 @@ private struct ActualFoodEntryEditorView: View {
     let entry: ActualFoodEntry?
     let mealSlot: MealSlot
     let onSave: (ActualFoodEntry) -> Void
+    let modelContext: ModelContext
 
     @State private var foodName: String
     @State private var amount: String
@@ -443,16 +496,19 @@ private struct ActualFoodEntryEditorView: View {
     @State private var protein: String
     @State private var carbohydrates: String
     @State private var fat: String
+    @State private var saveAsTemplate: Bool
     @State private var validationMessage: String?
 
     init(
         entry: ActualFoodEntry?,
         mealSlot: MealSlot,
-        onSave: @escaping (ActualFoodEntry) -> Void
+        onSave: @escaping (ActualFoodEntry) -> Void,
+        modelContext: ModelContext
     ) {
         self.entry = entry
         self.mealSlot = mealSlot
         self.onSave = onSave
+        self.modelContext = modelContext
         _foodName = State(initialValue: entry?.foodName ?? "")
         _amount = State(initialValue: entry.map { String($0.amount) } ?? "")
         _unit = State(initialValue: entry?.unit ?? "g")
@@ -461,6 +517,7 @@ private struct ActualFoodEntryEditorView: View {
         _protein = State(initialValue: entry?.proteinPerBasis.map { String($0) } ?? "")
         _carbohydrates = State(initialValue: entry?.carbohydratesPerBasis.map { String($0) } ?? "")
         _fat = State(initialValue: entry?.fatPerBasis.map { String($0) } ?? "")
+        _saveAsTemplate = State(initialValue: false)
     }
 
     var body: some View {
@@ -491,6 +548,15 @@ private struct ActualFoodEntryEditorView: View {
                     Text("营养快照")
                 } footer: {
                     Text("例如：熟米饭 200 g；营养基准数量填 100，每基准量能量填 116。")
+                }
+
+                if entry == nil {
+                    Section("下次快速记录") {
+                        Toggle("保存为食物模板", isOn: $saveAsTemplate)
+                        Text("保存后可从“最近使用”或“收藏”中快速选择；历史记录仍保留本次营养快照。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section {
@@ -553,8 +619,41 @@ private struct ActualFoodEntryEditorView: View {
             return
         }
 
+        var templateID = entry?.templateID
+        var source = entry?.dataSource ?? .manual
+        if saveAsTemplate {
+            guard let templateUnit = templateUnit(for: normalizedUnit) else {
+                validationMessage = "保存为模板时，单位必须是 g、ml、份或包装。"
+                return
+            }
+
+            let template = FoodTemplate(
+                name: name,
+                basisAmount: basisValue,
+                basisUnit: templateUnit,
+                caloriesPerBasis: calorieValue,
+                proteinPerBasis: parseOptionalNonNegative(protein),
+                fatPerBasis: parseOptionalNonNegative(fat),
+                carbohydratesPerBasis: parseOptionalNonNegative(carbohydrates),
+                source: .manual,
+                confidence: .high
+            )
+            do {
+                try template.validateForSave()
+                modelContext.insert(template)
+                try modelContext.save()
+                templateID = template.id
+                source = .template
+            } catch {
+                modelContext.delete(template)
+                validationMessage = error.localizedDescription
+                return
+            }
+        }
+
         let result = ActualFoodEntry(
             id: entry?.id ?? UUID(),
+            templateID: templateID,
             mealSlot: mealSlot,
             foodName: name,
             amount: amountValue,
@@ -564,7 +663,7 @@ private struct ActualFoodEntryEditorView: View {
             proteinPerBasis: parseOptionalNonNegative(protein),
             carbohydratesPerBasis: parseOptionalNonNegative(carbohydrates),
             fatPerBasis: parseOptionalNonNegative(fat),
-            dataSource: entry?.dataSource ?? .manual,
+            dataSource: source,
             confidence: entry?.confidence,
             isConfirmed: true
         )
@@ -586,6 +685,16 @@ private struct ActualFoodEntryEditorView: View {
     private func parseOptionalNonNegative(_ text: String) -> Double? {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return parseNonNegative(text)
+    }
+
+    private func templateUnit(for text: String) -> FoodNutritionBasisUnit? {
+        switch text.lowercased() {
+        case "g", "克", "gram", "grams": .gram
+        case "ml", "毫升", "milliliter", "milliliters": .milliliter
+        case "份", "serving", "servings": .serving
+        case "包装", "package", "packages": .package
+        default: nil
+        }
     }
 
     private var previewCalories: Double? {
