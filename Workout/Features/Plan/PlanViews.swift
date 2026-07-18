@@ -416,15 +416,17 @@ private struct ActualFoodEntryEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("本次进食") {
+                Section {
                     LabeledContent("餐次", value: mealSlot.displayName)
                     TextField("食物名称，例如熟米饭", text: $foodName)
                     TextField("实际数量", text: $amount)
                         .keyboardType(.decimalPad)
                     TextField("单位，例如 g、ml、份", text: $unit)
+                } header: {
+                    Text("本次进食")
                 }
 
-                Section("营养快照") {
+                Section {
                     TextField("营养基准数量，例如 100", text: $basisAmount)
                         .keyboardType(.decimalPad)
                     TextField("每基准量能量（kcal）", text: $calories)
@@ -435,11 +437,13 @@ private struct ActualFoodEntryEditorView: View {
                         .keyboardType(.decimalPad)
                     TextField("脂肪（g，可选）", text: $fat)
                         .keyboardType(.decimalPad)
+                } header: {
+                    Text("营养快照")
                 } footer: {
                     Text("例如：熟米饭 200 g；营养基准数量填 100，每基准量能量填 116。")
                 }
 
-                Section("本条估算") {
+                Section {
                     if let calories = previewCalories {
                         LabeledContent("能量", value: formattedCalories(calories))
                         if let protein = previewMacro(self.protein) {
@@ -455,6 +459,8 @@ private struct ActualFoodEntryEditorView: View {
                         Text("输入实际数量、营养基准数量和能量后显示估算结果。")
                             .foregroundStyle(.secondary)
                     }
+                } header: {
+                    Text("本条估算")
                 }
             }
             .navigationTitle(entry == nil ? "添加实际进食" : "编辑实际进食")
