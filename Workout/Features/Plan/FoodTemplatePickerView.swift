@@ -127,7 +127,7 @@ struct FoodTemplatePickerView: View {
     private func templateRow(_ template: FoodTemplate) -> some View {
         HStack(spacing: 12) {
             Image(systemName: template.isFavorite ? "star.fill" : "fork.knife")
-                .foregroundStyle(template.isFavorite ? .yellow : .tint)
+                .foregroundStyle(template.isFavorite ? .yellow : Color.accentColor)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 3) {
