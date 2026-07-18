@@ -356,3 +356,17 @@ typealias DailyMealPlan = WorkoutSchemaV5.DailyMealPlan
 typealias DailyWorkoutPlan = WorkoutSchemaV4.DailyWorkoutPlan
 typealias SyncTombstone = WorkoutSchemaV4.SyncTombstone
 typealias CloudSyncState = WorkoutSchemaV4.CloudSyncState
+
+extension WeightLossPlan {
+    /// Best available body weight for a given day: the most recent recorded
+    /// weight up to that day, falling back to the plan's projected weight when
+    /// nothing has been recorded yet.
+    func effectiveWeight(on date: Date, from records: [DailyBodyRecord]) -> Double {
+        let recorded = records
+            .filter { $0.planID == id && $0.date <= date && $0.actualWeight != nil }
+            .sorted { $0.date < $1.date }
+            .last?
+            .actualWeight
+        return recorded ?? plannedWeight(on: date)
+    }
+}

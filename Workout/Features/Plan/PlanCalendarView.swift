@@ -70,6 +70,7 @@ struct PlanCalendarView: View {
                         plan: plan,
                         date: date,
                         bodyRecord: bodyRecord(on: date),
+                        bodyRecords: bodyRecords,
                         mealPlan: mealPlan(on: date),
                         workoutPlan: workoutPlan(on: date)
                     )
@@ -232,13 +233,23 @@ struct DayPlanSummaryView: View {
     let plan: WeightLossPlan
     let date: Date
     let bodyRecord: DailyBodyRecord?
+    /// Full history so equivalent-activity weight can fall back to the most
+    /// recent prior record when the selected day has none.
+    let bodyRecords: [DailyBodyRecord]
     let mealPlan: DailyMealPlan?
     let workoutPlan: DailyWorkoutPlan?
 
     var body: some View {
         List {
             if let bodyRecord { NavigationLink("身体记录") { BodyRecordView(record: bodyRecord, plan: plan) } }
-            if let mealPlan { NavigationLink("饮食计划") { MealPlanDetailView(plan: mealPlan) } }
+            if let mealPlan {
+                NavigationLink("饮食计划") {
+                    MealPlanDetailView(
+                        plan: mealPlan,
+                        bodyWeight: plan.effectiveWeight(on: mealPlan.date, from: bodyRecords)
+                    )
+                }
+            }
             if let workoutPlan { NavigationLink("锻炼计划") { WorkoutPlanDetailView(plan: workoutPlan) } }
         }
         .navigationTitle(date.formatted(date: .complete, time: .omitted))
