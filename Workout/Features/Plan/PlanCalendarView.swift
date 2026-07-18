@@ -70,6 +70,7 @@ struct PlanCalendarView: View {
                         plan: plan,
                         date: date,
                         bodyRecord: bodyRecord(on: date),
+                        bodyRecords: bodyRecords,
                         mealPlan: mealPlan(on: date),
                         workoutPlan: workoutPlan(on: date)
                     )
@@ -232,6 +233,9 @@ struct DayPlanSummaryView: View {
     let plan: WeightLossPlan
     let date: Date
     let bodyRecord: DailyBodyRecord?
+    /// Full history so equivalent-activity weight can fall back to the most
+    /// recent prior record when the selected day has none.
+    let bodyRecords: [DailyBodyRecord]
     let mealPlan: DailyMealPlan?
     let workoutPlan: DailyWorkoutPlan?
 
@@ -242,7 +246,7 @@ struct DayPlanSummaryView: View {
                 NavigationLink("饮食计划") {
                     MealPlanDetailView(
                         plan: mealPlan,
-                        bodyWeight: plan.effectiveWeight(on: mealPlan.date, from: [bodyRecord].compactMap { $0 })
+                        bodyWeight: plan.effectiveWeight(on: mealPlan.date, from: bodyRecords)
                     )
                 }
             }
