@@ -31,14 +31,14 @@ struct NutritionLabelConfirmationView: View {
         self.result = result
         self.onConfirm = onConfirm
         self.onManualEntry = onManualEntry
-        _basisAmount = State(initialValue: result.basisAmount.map { String($0) } ?? "100")
+        _basisAmount = State(initialValue: result.basisAmount.map { NutritionDecimalInput.text(from: $0) } ?? "100")
         _basisUnit = State(initialValue: result.basisUnit ?? .gram)
-        _calories = State(initialValue: result.calories.map { String($0) } ?? "")
+        _calories = State(initialValue: NutritionDecimalInput.text(from: result.calories))
         _energyUnit = State(initialValue: result.energyUnit)
-        _protein = State(initialValue: result.protein.map { String($0) } ?? "")
-        _fat = State(initialValue: result.fat.map { String($0) } ?? "")
-        _carbohydrates = State(initialValue: result.carbohydrates.map { String($0) } ?? "")
-        _sodium = State(initialValue: result.sodium.map { String($0) } ?? "")
+        _protein = State(initialValue: NutritionDecimalInput.text(from: result.protein))
+        _fat = State(initialValue: NutritionDecimalInput.text(from: result.fat))
+        _carbohydrates = State(initialValue: NutritionDecimalInput.text(from: result.carbohydrates))
+        _sodium = State(initialValue: NutritionDecimalInput.text(from: result.sodium))
     }
 
     private var requiresVerification: Bool {
@@ -62,33 +62,49 @@ struct NutritionLabelConfirmationView: View {
 
                 Section("食物信息") {
                     TextField("食物名称，例如牛奶", text: $name)
-                    HStack {
-                        TextField("营养基准数量", text: $basisAmount)
-                            .keyboardType(.decimalPad)
-                        Picker("单位", selection: $basisUnit) {
-                            ForEach(FoodNutritionBasisUnit.allCases) { unit in
-                                Text(unit.rawValue).tag(unit)
+                    LabeledContent("营养基准数量") {
+                        HStack {
+                            TextField("例如 100", text: $basisAmount)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .onChange(of: basisAmount) { _, newValue in
+                                    let clamped = NutritionDecimalInput.clamp(newValue)
+                                    if clamped != newValue { basisAmount = clamped }
+                                }
+                            Picker("单位", selection: $basisUnit) {
+                                ForEach(FoodNutritionBasisUnit.allCases) { unit in
+                                    Text(unit.rawValue).tag(unit)
+                                }
                             }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
                         }
-                        .pickerStyle(.menu)
                     }
                 }
 
                 Section("营养快照") {
-                    HStack {
-                        TextField("能量", text: $calories)
-                            .keyboardType(.decimalPad)
-                        Picker("能量单位", selection: $energyUnit) {
-                            ForEach(FoodEnergyUnit.allCases) { unit in
-                                Text(unit.displayName).tag(unit)
+                    LabeledContent("能量") {
+                        HStack {
+                            TextField("例如 116", text: $calories)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .onChange(of: calories) { _, newValue in
+                                    let clamped = NutritionDecimalInput.clamp(newValue)
+                                    if clamped != newValue { calories = clamped }
+                                }
+                            Picker("能量单位", selection: $energyUnit) {
+                                ForEach(FoodEnergyUnit.allCases) { unit in
+                                    Text(unit.displayName).tag(unit)
+                                }
                             }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
                         }
-                        .pickerStyle(.menu)
                     }
-                    numericField("蛋白质（g，可选）", text: $protein)
-                    numericField("脂肪（g，可选）", text: $fat)
-                    numericField("碳水化合物（g，可选）", text: $carbohydrates)
-                    numericField("钠（mg，可选）", text: $sodium)
+                    NutritionNumberField(label: "蛋白质（g）", placeholder: "可选", text: $protein)
+                    NutritionNumberField(label: "脂肪（g）", placeholder: "可选", text: $fat)
+                    NutritionNumberField(label: "碳水化合物（g）", placeholder: "可选", text: $carbohydrates)
+                    NutritionNumberField(label: "钠（mg）", placeholder: "可选", text: $sodium)
                     if let sugar = result.sugar {
                         LabeledContent("识别到糖", value: "\(sugar.formatted(.number.precision(.fractionLength(0...1)))) g")
                     }
@@ -131,11 +147,6 @@ struct NutritionLabelConfirmationView: View {
         }
     }
 
-    @ViewBuilder
-    private func numericField(_ title: String, text: Binding<String>) -> some View {
-        TextField(title, text: text)
-            .keyboardType(.decimalPad)
-    }
 
     private func confirm() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)

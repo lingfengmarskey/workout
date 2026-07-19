@@ -532,17 +532,17 @@ private struct ActualFoodEntryEditorView: View {
         self.onSave = onSave
         self.modelContext = modelContext
         _foodName = State(initialValue: entry?.foodName ?? "")
-        _amount = State(initialValue: entry.map { String($0.amount) } ?? "")
+        _amount = State(initialValue: entry.map { NutritionDecimalInput.text(from: $0.amount) } ?? "")
         _unit = State(initialValue: entry?.unit ?? "g")
-        _basisAmount = State(initialValue: entry.map { String($0.nutritionBasisAmount) } ?? "100")
+        _basisAmount = State(initialValue: entry.map { NutritionDecimalInput.text(from: $0.nutritionBasisAmount) } ?? "100")
         _energyValue = State(initialValue: entry.map {
-            String($0.originalEnergyPerBasis ?? $0.caloriesPerBasis)
+            NutritionDecimalInput.text(from: $0.originalEnergyPerBasis ?? $0.caloriesPerBasis)
         } ?? "")
         _energyUnit = State(initialValue: entry?.originalEnergyUnit ?? .kcal)
-        _protein = State(initialValue: entry?.proteinPerBasis.map { String($0) } ?? "")
-        _carbohydrates = State(initialValue: entry?.carbohydratesPerBasis.map { String($0) } ?? "")
-        _fat = State(initialValue: entry?.fatPerBasis.map { String($0) } ?? "")
-        _sodium = State(initialValue: entry?.sodiumPerBasis.map { String($0) } ?? "")
+        _protein = State(initialValue: NutritionDecimalInput.text(from: entry?.proteinPerBasis))
+        _carbohydrates = State(initialValue: NutritionDecimalInput.text(from: entry?.carbohydratesPerBasis))
+        _fat = State(initialValue: NutritionDecimalInput.text(from: entry?.fatPerBasis))
+        _sodium = State(initialValue: NutritionDecimalInput.text(from: entry?.sodiumPerBasis))
         _saveAsTemplate = State(initialValue: false)
         _confirmedLowConfidence = State(initialValue: (entry?.confidence ?? 1) >= 1)
     }
@@ -561,26 +561,29 @@ private struct ActualFoodEntryEditorView: View {
                 }
 
                 Section {
-                    TextField("营养基准数量，例如 100", text: $basisAmount)
-                        .keyboardType(.decimalPad)
-                    HStack {
-                        TextField("每基准量能量", text: $energyValue)
-                            .keyboardType(.decimalPad)
-                        Picker("能量单位", selection: $energyUnit) {
-                            ForEach(FoodEnergyUnit.allCases) { item in
-                                Text(item.displayName).tag(item)
+                    NutritionNumberField(label: "营养基准数量", placeholder: "例如 100", text: $basisAmount)
+                    LabeledContent("每基准量能量") {
+                        HStack {
+                            TextField("例如 116", text: $energyValue)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .onChange(of: energyValue) { _, newValue in
+                                    let clamped = NutritionDecimalInput.clamp(newValue)
+                                    if clamped != newValue { energyValue = clamped }
+                                }
+                            Picker("能量单位", selection: $energyUnit) {
+                                ForEach(FoodEnergyUnit.allCases) { item in
+                                    Text(item.displayName).tag(item)
+                                }
                             }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
                         }
-                        .pickerStyle(.menu)
                     }
-                    TextField("蛋白质（g，可选）", text: $protein)
-                        .keyboardType(.decimalPad)
-                    TextField("碳水（g，可选）", text: $carbohydrates)
-                        .keyboardType(.decimalPad)
-                    TextField("脂肪（g，可选）", text: $fat)
-                        .keyboardType(.decimalPad)
-                    TextField("钠（mg，可选）", text: $sodium)
-                        .keyboardType(.decimalPad)
+                    NutritionNumberField(label: "蛋白质（g）", placeholder: "可选", text: $protein)
+                    NutritionNumberField(label: "碳水（g）", placeholder: "可选", text: $carbohydrates)
+                    NutritionNumberField(label: "脂肪（g）", placeholder: "可选", text: $fat)
+                    NutritionNumberField(label: "钠（mg）", placeholder: "可选", text: $sodium)
                 } header: {
                     Text("营养快照")
                 } footer: {

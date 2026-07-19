@@ -27,12 +27,12 @@ struct BarcodeFoodConfirmationView: View {
         self.onManualEntry = onManualEntry
         _name = State(initialValue: product.name)
         _brand = State(initialValue: product.brand)
-        _basisAmount = State(initialValue: String(product.basisAmount))
-        _calories = State(initialValue: String(product.caloriesPerBasis))
-        _protein = State(initialValue: product.proteinPerBasis.map { String($0) } ?? "")
-        _carbohydrates = State(initialValue: product.carbohydratesPerBasis.map { String($0) } ?? "")
-        _fat = State(initialValue: product.fatPerBasis.map { String($0) } ?? "")
-        _sodium = State(initialValue: product.sodiumPerBasis.map { String($0) } ?? "")
+        _basisAmount = State(initialValue: NutritionDecimalInput.text(from: product.basisAmount))
+        _calories = State(initialValue: NutritionDecimalInput.text(from: product.caloriesPerBasis))
+        _protein = State(initialValue: NutritionDecimalInput.text(from: product.proteinPerBasis))
+        _carbohydrates = State(initialValue: NutritionDecimalInput.text(from: product.carbohydratesPerBasis))
+        _fat = State(initialValue: NutritionDecimalInput.text(from: product.fatPerBasis))
+        _sodium = State(initialValue: NutritionDecimalInput.text(from: product.sodiumPerBasis))
     }
 
     var body: some View {
@@ -49,12 +49,12 @@ struct BarcodeFoodConfirmationView: View {
                 }
 
                 Section("每 \(product.basisAmount.formatted(.number.precision(.fractionLength(0...1)))) \(product.basisUnit.rawValue)") {
-                    numericField("基准数量", text: $basisAmount)
-                    numericField("能量（kcal）", text: $calories)
-                    numericField("蛋白质（g，可选）", text: $protein)
-                    numericField("碳水（g，可选）", text: $carbohydrates)
-                    numericField("脂肪（g，可选）", text: $fat)
-                    numericField("钠（mg，可选）", text: $sodium)
+                    NutritionNumberField(label: "基准数量", text: $basisAmount)
+                    NutritionNumberField(label: "能量（kcal）", text: $calories)
+                    NutritionNumberField(label: "蛋白质（g）", placeholder: "可选", text: $protein)
+                    NutritionNumberField(label: "碳水（g）", placeholder: "可选", text: $carbohydrates)
+                    NutritionNumberField(label: "脂肪（g）", placeholder: "可选", text: $fat)
+                    NutritionNumberField(label: "钠（mg）", placeholder: "可选", text: $sodium)
                 }
 
                 Section {
@@ -87,12 +87,6 @@ struct BarcodeFoodConfirmationView: View {
                 Text(errorMessage ?? "请检查输入。")
             }
         }
-    }
-
-    @ViewBuilder
-    private func numericField(_ title: String, text: Binding<String>) -> some View {
-        TextField(title, text: text)
-            .keyboardType(.decimalPad)
     }
 
     private func confirm() {
