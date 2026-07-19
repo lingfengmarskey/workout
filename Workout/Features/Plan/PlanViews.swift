@@ -409,7 +409,13 @@ struct MealPlanDetailView: View {
             sodiumPerBasis: template.sodiumPerBasis,
             originalEnergyPerBasis: template.caloriesPerBasis,
             originalEnergyUnit: .kcal,
-            dataSource: template.source == .barcodeDatabase ? .barcodeDatabase : .template,
+            dataSource: {
+                switch template.source {
+                case .barcodeDatabase: .barcodeDatabase
+                case .labelOCR: .labelOCR
+                default: .template
+                }
+            }(),
             confidence: templateConfidenceScore(template.confidence),
             isConfirmed: true
         )
