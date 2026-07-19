@@ -90,10 +90,10 @@ struct NutritionLabelConfirmationView: View {
                     numericField("碳水化合物（g，可选）", text: $carbohydrates)
                     numericField("钠（mg，可选）", text: $sodium)
                     if let sugar = result.sugar {
-                        LabeledContent("识别到糖", value: "(sugar.formatted(.number.precision(.fractionLength(0...1)))) g")
+                        LabeledContent("识别到糖", value: "\(sugar.formatted(.number.precision(.fractionLength(0...1)))) g")
                     }
                     if let fiber = result.fiber {
-                        LabeledContent("识别到膳食纤维", value: "(fiber.formatted(.number.precision(.fractionLength(0...1)))) g")
+                        LabeledContent("识别到膳食纤维", value: "\(fiber.formatted(.number.precision(.fractionLength(0...1)))) g")
                     }
                 }
 

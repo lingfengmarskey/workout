@@ -50,7 +50,7 @@ struct NutritionLabelOCRResult: Equatable {
 }
 
 enum NutritionLabelParser {
-    private static let number = "([0-9０-９]+(?:[.,，][0-9０-９]+)?)"
+    private static let number = "([0-9０-９]+(?:[.,，．][0-9０-９]+)?)"
 
     static func parse(_ rawText: String) -> NutritionLabelOCRResult {
         let normalizedText = normalize(rawText)
@@ -84,7 +84,7 @@ enum NutritionLabelParser {
             parseNutrient(line, aliases: ["sodium", "钠", "鈉", "ナトリウム"], field: .sodium, into: &result, multiplier: 1)
         }
 
-        if result.basisAmount != nil, result.basisUnit != nil {
+        if result.calories != nil, result.basisAmount != nil, result.basisUnit != nil {
             result.fieldConfidences[.energy, default: 0] += 0.1
         }
         return result
@@ -169,6 +169,7 @@ enum NutritionLabelParser {
             .replacingOccurrences(of: "８", with: "8")
             .replacingOccurrences(of: "９", with: "9")
             .replacingOccurrences(of: "，", with: ".")
+            .replacingOccurrences(of: "．", with: ".")
             .replacingOccurrences(of: ",", with: ".")
         return Double(normalized)
     }

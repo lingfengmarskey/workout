@@ -32,5 +32,18 @@ final class NutritionLabelParserTests: XCTestCase {
         XCTAssertNil(result.calories)
         XCTAssertFalse(result.hasRequiredNutrition)
     }
+
+    func testParsesFullWidthDecimalPoint() {
+        let result = NutritionLabelParser.parse("每100克\n能量 116 千卡\n蛋白质 10．5克")
+
+        XCTAssertEqual(result.protein ?? -1, 10.5, accuracy: 0.001)
+    }
+
+    func testEnergyConfidenceNotBoostedWhenEnergyMissing() {
+        let result = NutritionLabelParser.parse("每100克\n蛋白质 10克")
+
+        // Energy was never parsed, so it must not appear in the confidence map.
+        XCTAssertNil(result.fieldConfidences[.energy])
+    }
 }
 
