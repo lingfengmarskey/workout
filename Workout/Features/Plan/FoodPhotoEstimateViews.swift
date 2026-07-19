@@ -1,3 +1,4 @@
+import AVFoundation
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -23,11 +24,7 @@ struct FoodPhotoEstimateCaptureView: View {
                     .padding(.horizontal)
 
                 Button {
-                    guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-                        onError("当前设备没有可用摄像头，请从相册选择或改用手动输入。")
-                        return
-                    }
-                    cameraPresented = true
+                    presentCamera()
                 } label: {
                     Label("拍摄食物照片", systemImage: "camera")
                         .frame(maxWidth: .infinity)
@@ -77,6 +74,32 @@ struct FoodPhotoEstimateCaptureView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func presentCamera() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            onError("当前设备没有可用摄像头，请从相册选择或改用手动输入。")
+            return
+        }
+
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            cameraPresented = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        cameraPresented = true
+                    } else {
+                        onError("相机权限未开启，请在系统设置中允许访问相机，或改用相册选择和手动输入。")
+                    }
+                }
+            }
+        case .denied, .restricted:
+            onError("相机权限未开启，请在系统设置中允许访问相机，或改用相册选择和手动输入。")
+        @unknown default:
+            onError("无法访问相机，请改用相册选择或手动输入。")
         }
     }
 }
@@ -261,6 +284,9 @@ struct FoodPhotoEstimateConfirmationView: View {
                 && $0.basisAmount.isFinite && $0.basisAmount > 0
                 && $0.caloriesPerBasis.isFinite && $0.caloriesPerBasis >= 0
                 && [$0.proteinPerBasis, $0.carbohydratesPerBasis, $0.fatPerBasis, $0.sodiumPerBasis]
+                    .compactMap { $0 }
+                    .allSatisfy { $0.isFinite && $0 >= 0 }
+                && [$0.calories, $0.protein, $0.carbohydrates, $0.fat, $0.sodium]
                     .compactMap { $0 }
                     .allSatisfy { $0.isFinite && $0 >= 0 }
                 && $0.confidence.isFinite && (0...1).contains($0.confidence)
