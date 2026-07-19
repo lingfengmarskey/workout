@@ -1,6 +1,5 @@
 import SwiftData
 import SwiftUI
-import UIKit
 
 struct FoodTemplatePickerView: View {
     @Environment(\.dismiss) private var dismiss
@@ -19,10 +18,7 @@ struct FoodTemplatePickerView: View {
     @State private var barcodeError: String?
     @State private var scannerError: String?
     @State private var isLookingUpBarcode = false
-    @State private var ocrCapturePresented = false
-    @State private var ocrDraft: NutritionLabelOCRDraft?
-    @State private var ocrError: String?
-    @State private var isRecognizingOCR = false
+    @State private var ocrFlowPresented = false
 
     init(
         mealSlot: MealSlot,
@@ -103,7 +99,7 @@ struct FoodTemplatePickerView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        ocrCapturePresented = true
+                        ocrFlowPresented = true
                     } label: {
                         Image(systemName: "doc.text.viewfinder")
                     }
@@ -153,37 +149,19 @@ struct FoodTemplatePickerView: View {
                     }
                 )
             }
-            .sheet(isPresented: $ocrCapturePresented) {
-                NutritionLabelCaptureView(
-                    onImage: { image in
-                        ocrCapturePresented = false
-                        recognizeNutritionLabel(in: image)
-                    },
-                    onError: { message in
-                        ocrCapturePresented = false
-                        ocrError = message
-                    }
-                )
-            }
-            .sheet(item: $ocrDraft) { draft in
-                NutritionLabelConfirmationView(
-                    image: draft.image,
-                    result: draft.result,
+            .sheet(isPresented: $ocrFlowPresented) {
+                NutritionLabelOCRFlowView(
                     onConfirm: { template in
                         modelContext.insert(template)
                         try? modelContext.save()
-                        ocrDraft = nil
                         onSelect(template)
                     },
-                    onManualEntry: {
-                        ocrDraft = nil
-                        onManualEntry()
-                    }
+                    onManualEntry: { onManualEntry() }
                 )
             }
             .overlay {
-                if isLookingUpBarcode || isRecognizingOCR {
-                    ProgressView(isRecognizingOCR ? "正在识别营养成分…" : "正在查询条码…")
+                if isLookingUpBarcode {
+                    ProgressView("正在查询条码…")
                         .padding(24)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                 }
@@ -207,18 +185,6 @@ struct FoodTemplatePickerView: View {
                 Button("取消", role: .cancel) { barcodeError = nil }
             } message: {
                 Text(barcodeError ?? "可以手动输入营养快照，或稍后重试。")
-            }
-            .alert("无法识别营养成分表", isPresented: Binding(
-                get: { ocrError != nil },
-                set: { if !$0 { ocrError = nil } }
-            )) {
-                Button("手动输入") {
-                    ocrError = nil
-                    onManualEntry()
-                }
-                Button("取消", role: .cancel) { ocrError = nil }
-            } message: {
-                Text(ocrError ?? "可以重新拍摄，或改为手动输入。")
             }
             .safeAreaInset(edge: .bottom) {
                 Button {
@@ -270,19 +236,6 @@ struct FoodTemplatePickerView: View {
         }
     }
 
-    private func recognizeNutritionLabel(in image: UIImage) {
-        isRecognizingOCR = true
-        Task {
-            defer { isRecognizingOCR = false }
-            do {
-                let result = try await NutritionLabelOCRService.recognize(image: image)
-                ocrDraft = NutritionLabelOCRDraft(image: image, result: result)
-            } catch {
-                ocrError = error.localizedDescription
-            }
-        }
-    }
-
     private var emptyTitle: String {
         switch filter {
         case .recent: "还没有最近使用的食物"
@@ -328,11 +281,5 @@ struct FoodTemplatePickerView: View {
         let calories = "\(template.caloriesPerBasis.formatted(.number.precision(.fractionLength(0...1)))) kcal"
         return [brand, amount, calories].compactMap { $0 }.joined(separator: " · ")
     }
-}
-
-private struct NutritionLabelOCRDraft: Identifiable {
-    let id = UUID()
-    let image: UIImage
-    let result: NutritionLabelOCRResult
 }
 
