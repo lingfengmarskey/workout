@@ -10,6 +10,7 @@ struct FoodTemplatePickerView: View {
     let mealSlot: MealSlot
     let onSelect: (FoodTemplate) -> Void
     let onManualEntry: () -> Void
+    let barcodeProvider: any FoodDatabaseProvider
 
     @State private var filter: FoodTemplateListFilter = .recent
     @State private var searchText = ""
@@ -18,6 +19,18 @@ struct FoodTemplatePickerView: View {
     @State private var barcodeError: String?
     @State private var scannerError: String?
     @State private var isLookingUpBarcode = false
+
+    init(
+        mealSlot: MealSlot,
+        onSelect: @escaping (FoodTemplate) -> Void,
+        onManualEntry: @escaping () -> Void,
+        barcodeProvider: any FoodDatabaseProvider = OpenFoodFactsProvider()
+    ) {
+        self.mealSlot = mealSlot
+        self.onSelect = onSelect
+        self.onManualEntry = onManualEntry
+        self.barcodeProvider = barcodeProvider
+    }
 
     var body: some View {
         NavigationStack {
@@ -194,7 +207,7 @@ struct FoodTemplatePickerView: View {
         Task {
             defer { isLookingUpBarcode = false }
             do {
-                guard let product = try await OpenFoodFactsProvider().lookup(barcode: normalized) else {
+                guard let product = try await barcodeProvider.lookup(barcode: normalized) else {
                     barcodeError = "没有找到 \(normalized) 对应的食品。你可以改为手动输入，保存后下次可直接选择。"
                     return
                 }
