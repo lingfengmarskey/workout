@@ -19,7 +19,10 @@ struct BarcodeFoodProduct: Codable, Equatable, Identifiable {
     var isUsable: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && basisAmount > 0
-            && caloriesPerBasis >= 0
+            // A missing energy field is normalized to 0 by the adapter and
+            // must fall back to manual entry instead of silently saving an
+            // incomplete barcode result.
+            && caloriesPerBasis > 0
             && caloriesPerBasis.isFinite
     }
 }
