@@ -70,6 +70,46 @@ enum FoodDataSource: String, Codable {
     case database
 }
 
+/// A user-confirmed activity added to a daily workout plan after reviewing
+/// an equivalent-activity suggestion for an actual meal.
+struct PlannedActivityAddition: Codable, Equatable, Identifiable {
+    var id: UUID
+    var sourceMealPlanID: UUID
+    var sourceFoodEntryIDs: [UUID]
+    var activityName: String
+    var systemImage: String
+    var impactRaw: String
+    var durationMinutes: Int
+    var estimatedCalories: Double
+    var createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        sourceMealPlanID: UUID,
+        sourceFoodEntryIDs: [UUID],
+        activityName: String,
+        systemImage: String,
+        impact: ActivityImpactLevel,
+        durationMinutes: Int,
+        estimatedCalories: Double,
+        createdAt: Date = .now
+    ) {
+        self.id = id
+        self.sourceMealPlanID = sourceMealPlanID
+        self.sourceFoodEntryIDs = sourceFoodEntryIDs
+        self.activityName = activityName
+        self.systemImage = systemImage
+        self.impactRaw = impact.rawValue
+        self.durationMinutes = durationMinutes
+        self.estimatedCalories = estimatedCalories
+        self.createdAt = createdAt
+    }
+
+    var impact: ActivityImpactLevel {
+        ActivityImpactLevel(rawValue: impactRaw) ?? .low
+    }
+}
+
 struct ActualFoodEntry: Codable, Equatable, Identifiable {
     var id: UUID
     /// Optional link to the template used to create this entry. Nutrition fields
