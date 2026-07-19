@@ -285,6 +285,7 @@ enum CloudRecordMergeService {
         model.fatigueLevel = payload.fatigueLevel
         model.painDescription = payload.painDescription
         model.note = payload.note
+        model.addedActivitiesJSON = payload.addedActivitiesJSON
         model.updatedAt = payload.identity.updatedAt
         model.syncRevision = payload.identity.syncRevision
     }
