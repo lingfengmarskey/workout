@@ -1,3 +1,4 @@
+import AVFoundation
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -23,7 +24,7 @@ struct FoodPhotoEstimateCaptureView: View {
                     .padding(.horizontal)
 
                 Button {
-                    cameraPresented = true
+                    presentCamera()
                 } label: {
                     Label("拍摄食物照片", systemImage: "camera")
                         .frame(maxWidth: .infinity)
@@ -73,6 +74,32 @@ struct FoodPhotoEstimateCaptureView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func presentCamera() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            onError("当前设备没有可用摄像头，请从相册选择或改用手动输入。")
+            return
+        }
+
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            cameraPresented = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        cameraPresented = true
+                    } else {
+                        onError("相机权限未开启，请在系统设置中允许访问相机，或改用相册选择和手动输入。")
+                    }
+                }
+            }
+        case .denied, .restricted:
+            onError("相机权限未开启，请在系统设置中允许访问相机，或改用相册选择和手动输入。")
+        @unknown default:
+            onError("无法访问相机，请改用相册选择或手动输入。")
         }
     }
 }
@@ -252,11 +279,19 @@ struct FoodPhotoEstimateConfirmationView: View {
         }
         guard candidates.allSatisfy({
             !$0.foodName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && FoodNutritionBasisUnit.parse($0.unit) != nil
                 && $0.amount.isFinite && $0.amount > 0
                 && $0.basisAmount.isFinite && $0.basisAmount > 0
                 && $0.caloriesPerBasis.isFinite && $0.caloriesPerBasis >= 0
+                && [$0.proteinPerBasis, $0.carbohydratesPerBasis, $0.fatPerBasis, $0.sodiumPerBasis]
+                    .compactMap { $0 }
+                    .allSatisfy { $0.isFinite && $0 >= 0 }
+                && [$0.calories, $0.protein, $0.carbohydrates, $0.fat, $0.sodium]
+                    .compactMap { $0 }
+                    .allSatisfy { $0.isFinite && $0 >= 0 }
+                && $0.confidence.isFinite && (0...1).contains($0.confidence)
         }) else {
-            validationMessage = "食物名称、数量、营养基准和能量必须是有效值。"
+            validationMessage = "食物名称、单位、数量、营养基准、营养值和可信度必须是有效值。"
             return
         }
 
@@ -286,6 +321,7 @@ struct FoodPhotoEstimateConfirmationView: View {
 
 private struct FoodPhotoEstimateCandidateEditor: View {
     @Binding var candidate: FoodPhotoEstimateCandidate
+    @State private var showsNutritionDetails = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -298,11 +334,21 @@ private struct FoodPhotoEstimateCandidateEditor: View {
             HStack {
                 TextField("数量", text: amountBinding)
                     .keyboardType(.decimalPad)
-                Text(candidate.unit)
-                    .foregroundStyle(.secondary)
+                TextField("单位", text: $candidate.unit)
+                    .frame(width: 52)
                 Text("· \(candidate.calories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            DisclosureGroup("编辑营养快照", isExpanded: $showsNutritionDetails) {
+                NutritionNumberField(label: "营养基准数量", text: basisAmountBinding)
+                NutritionNumberField(label: "每基准量能量（kcal）", text: caloriesBinding)
+                NutritionNumberField(label: "蛋白质（g）", placeholder: "可选", text: proteinBinding)
+                NutritionNumberField(label: "碳水（g）", placeholder: "可选", text: carbohydratesBinding)
+                NutritionNumberField(label: "脂肪（g）", placeholder: "可选", text: fatBinding)
+                NutritionNumberField(label: "钠（mg）", placeholder: "可选", text: sodiumBinding)
+                NutritionNumberField(label: "可信度（%）", text: confidenceBinding)
             }
         }
     }
@@ -311,6 +357,63 @@ private struct FoodPhotoEstimateCandidateEditor: View {
         Binding(
             get: { candidate.amount.formatted(.number.precision(.fractionLength(0...2))) },
             set: { candidate.amount = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0 }
+        )
+    }
+
+    private var basisAmountBinding: Binding<String> {
+        numberBinding(get: { candidate.basisAmount }, set: { candidate.basisAmount = $0 })
+    }
+
+    private var caloriesBinding: Binding<String> {
+        numberBinding(get: { candidate.caloriesPerBasis }, set: { candidate.caloriesPerBasis = $0 })
+    }
+
+    private var proteinBinding: Binding<String> {
+        optionalNumberBinding(get: { candidate.proteinPerBasis }, set: { candidate.proteinPerBasis = $0 })
+    }
+
+    private var carbohydratesBinding: Binding<String> {
+        optionalNumberBinding(get: { candidate.carbohydratesPerBasis }, set: { candidate.carbohydratesPerBasis = $0 })
+    }
+
+    private var fatBinding: Binding<String> {
+        optionalNumberBinding(get: { candidate.fatPerBasis }, set: { candidate.fatPerBasis = $0 })
+    }
+
+    private var sodiumBinding: Binding<String> {
+        optionalNumberBinding(get: { candidate.sodiumPerBasis }, set: { candidate.sodiumPerBasis = $0 })
+    }
+
+    private var confidenceBinding: Binding<String> {
+        Binding(
+            get: { NutritionDecimalInput.text(from: candidate.confidence * 100) },
+            set: {
+                let percentage = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0
+                candidate.confidence = min(max(percentage / 100, 0), 1)
+            }
+        )
+    }
+
+    private func numberBinding(
+        get: @escaping () -> Double,
+        set: @escaping (Double) -> Void
+    ) -> Binding<String> {
+        Binding(
+            get: { NutritionDecimalInput.text(from: get()) },
+            set: { set(Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0) }
+        )
+    }
+
+    private func optionalNumberBinding(
+        get: @escaping () -> Double?,
+        set: @escaping (Double?) -> Void
+    ) -> Binding<String> {
+        Binding(
+            get: { NutritionDecimalInput.text(from: get()) },
+            set: {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                set(trimmed.isEmpty ? nil : Double(trimmed.replacingOccurrences(of: ",", with: ".")))
+            }
         )
     }
 }
