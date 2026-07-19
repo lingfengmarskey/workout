@@ -10,6 +10,7 @@ struct FoodTemplatePickerView: View {
     let mealSlot: MealSlot
     let onSelect: (FoodTemplate) -> Void
     let onSelectCompound: (CompoundMealTemplate) -> Void
+    let onPhotoEstimate: ([ActualFoodEntry]) -> Void
     let onManualEntry: () -> Void
     let barcodeProvider: any FoodDatabaseProvider
 
@@ -22,17 +23,20 @@ struct FoodTemplatePickerView: View {
     @State private var isLookingUpBarcode = false
     @State private var ocrFlowPresented = false
     @State private var compoundEditorPresented = false
+    @State private var photoEstimatePresented = false
 
     init(
         mealSlot: MealSlot,
         onSelect: @escaping (FoodTemplate) -> Void,
         onManualEntry: @escaping () -> Void,
         onSelectCompound: @escaping (CompoundMealTemplate) -> Void = { _ in },
+        onPhotoEstimate: @escaping ([ActualFoodEntry]) -> Void = { _ in },
         barcodeProvider: any FoodDatabaseProvider = OpenFoodFactsProvider()
     ) {
         self.mealSlot = mealSlot
         self.onSelect = onSelect
         self.onSelectCompound = onSelectCompound
+        self.onPhotoEstimate = onPhotoEstimate
         self.onManualEntry = onManualEntry
         self.barcodeProvider = barcodeProvider
     }
@@ -155,6 +159,14 @@ struct FoodTemplatePickerView: View {
                     .accessibilityLabel("拍摄营养成分表")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        photoEstimatePresented = true
+                    } label: {
+                        Image(systemName: "camera.macro")
+                    }
+                    .accessibilityLabel("拍摄食物并估算能量")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         ForEach(FoodTemplateListFilter.allCases) { item in
                             Button {
@@ -215,6 +227,19 @@ struct FoodTemplatePickerView: View {
                     try? modelContext.save()
                     compoundEditorPresented = false
                 }
+            }
+            .sheet(isPresented: $photoEstimatePresented) {
+                FoodPhotoEstimateFlowView(
+                    mealSlot: mealSlot,
+                    onConfirm: { entries in
+                        photoEstimatePresented = false
+                        onPhotoEstimate(entries)
+                    },
+                    onManualEntry: {
+                        photoEstimatePresented = false
+                        onManualEntry()
+                    }
+                )
             }
             .overlay {
                 if isLookingUpBarcode {
