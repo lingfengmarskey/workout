@@ -126,12 +126,15 @@ struct MealPlanDetailView: View {
     @Bindable var plan: DailyMealPlan
     @Environment(\.modelContext) private var modelContext
     @Query private var foodTemplates: [FoodTemplate]
+    @Query private var workoutPlans: [DailyWorkoutPlan]
     /// Body weight (kg) used to convert energy into equivalent activity time.
     var bodyWeight: Double
     @State private var initialSyncFingerprint: String?
     @State private var editorRequest: ActualFoodEntryEditorRequest?
     @State private var templatePickerSlot: MealSlot?
     @State private var compoundMealRequest: CompoundMealEditorRequest?
+    @State private var pendingActivity: EquivalentActivity?
+    @State private var activityError: String?
 
     var body: some View {
         Form {
@@ -286,6 +289,24 @@ struct MealPlanDetailView: View {
                 onSave: upsertActualFoodEntry
             )
         }
+        .alert(item: $pendingActivity) { activity in
+            Alert(
+                title: Text("加入今日锻炼计划？"),
+                message: Text("\(activity.name) 建议约 \(activityIntervalText(activity))。将按区间中值加入当天的锻炼计划。"),
+                primaryButton: .default(Text("加入")) {
+                    addActivity(activity)
+                },
+                secondaryButton: .cancel(Text("暂不加入"))
+            )
+        }
+        .alert("无法加入活动", isPresented: Binding(
+            get: { activityError != nil },
+            set: { if !$0 { activityError = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(activityError ?? "")
+        }
     }
 
     @ViewBuilder
@@ -300,29 +321,73 @@ struct MealPlanDetailView: View {
                 Text("记录实际进食后显示等效活动参考。")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(suggestions, id: \.name) { activity in
-                    LabeledContent {
-                        Text(activityIntervalText(activity))
-                            .foregroundStyle(.secondary)
+                ForEach(suggestions) { activity in
+                    Button {
+                        pendingActivity = activity
                     } label: {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(activity.name)
-                                Text(activity.impact.displayName)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        HStack {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(activity.name)
+                                    Text(activity.impact.displayName)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                Image(systemName: activity.systemImage)
                             }
-                        } icon: {
-                            Image(systemName: activity.systemImage)
+                            Spacer()
+                            Text(activityIntervalText(activity))
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                         }
                     }
+                    .buttonStyle(.plain)
                 }
 
-                Text("等效活动参考仅供换算，实际消耗会受体重、速度、坡度、技术和设备影响。这不是必须完成的运动，也不建议靠运动抵消进食。")
+                Text("点击活动可将其加入今天的锻炼计划。等效活动参考仅供换算，实际消耗会受体重、速度、坡度、技术和设备影响。这不是必须完成的运动，也不建议靠运动抵消进食。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func addActivity(_ activity: EquivalentActivity) {
+        guard let workout = workoutPlans.first(where: {
+            $0.planID == plan.planID && Calendar.current.isDate($0.date, inSameDayAs: plan.date)
+        }) else {
+            activityError = "今天没有可追加的锻炼计划，请先创建或恢复今天的计划。"
+            return
+        }
+
+        let duration = max(activity.minMinutes, (activity.minMinutes + activity.maxMinutes) / 2)
+        let sourceEntryIDs = plan.actualFoodEntries.map(\.id)
+        let alreadyAdded = workout.addedActivities.contains {
+            $0.sourceMealPlanID == plan.id && $0.activityName == activity.name
+        }
+        guard !alreadyAdded else {
+            activityError = "这个活动已经加入今天的锻炼计划。"
+            return
+        }
+
+        var additions = workout.addedActivities
+        additions.append(
+            PlannedActivityAddition(
+                sourceMealPlanID: plan.id,
+                sourceFoodEntryIDs: sourceEntryIDs,
+                activityName: activity.name,
+                systemImage: activity.systemImage,
+                impact: activity.impact,
+                durationMinutes: duration,
+                estimatedCalories: plan.actualCalories
+            )
+        )
+        workout.addedActivities = additions
+        workout.updatedAt = .now
+        workout.syncRevision += 1
+        try? modelContext.save()
     }
 
     private func activityIntervalText(_ activity: EquivalentActivity) -> String {
@@ -892,6 +957,22 @@ struct WorkoutPlanDetailView: View {
 
             Section("有氧") {
                 Text(plan.cardioDescription)
+            }
+
+            if !plan.addedActivities.isEmpty {
+                Section("追加活动") {
+                    ForEach(plan.addedActivities) { activity in
+                        LabeledContent {
+                            Text("\(activity.durationMinutes) 分钟")
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label(activity.activityName, systemImage: activity.systemImage)
+                        }
+                        Text("来源：实际进食记录 · 约 \(activity.estimatedCalories.formatted(.number.precision(.fractionLength(0)))) kcal")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section("拉伸与放松") {
