@@ -39,7 +39,7 @@ struct CompoundMealEditorView: View {
                 } footer: {
                     if !components.isEmpty {
                         let nutrition = CompoundMealCalculator.nutrition(for: components)
-                        Text("每份合计约 \\(nutrition.calories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
+                        Text("每份合计约 \(nutrition.calories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
                     }
                 }
 
@@ -56,7 +56,7 @@ struct CompoundMealEditorView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(template.name)
                                             .foregroundStyle(.primary)
-                                        Text("每 \\(template.basisAmount.formatted(.number.precision(.fractionLength(0...1))))\\(template.basisUnit.rawValue) · \\(template.caloriesPerBasis.formatted(.number.precision(.fractionLength(0...1)))) kcal")
+                                        Text("每 \(template.basisAmount.formatted(.number.precision(.fractionLength(0...1))))\(template.basisUnit.rawValue) · \(template.caloriesPerBasis.formatted(.number.precision(.fractionLength(0...1)))) kcal")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -96,7 +96,7 @@ struct CompoundMealEditorView: View {
                 Text(component.wrappedValue.foodName)
                     .font(.body.weight(.medium))
                 Spacer()
-                Text("每 \\(component.wrappedValue.caloriesPerBasis.formatted(.number.precision(.fractionLength(0...1)))) kcal")
+                Text("每 \(component.wrappedValue.caloriesPerBasis.formatted(.number.precision(.fractionLength(0...1)))) kcal")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -105,7 +105,7 @@ struct CompoundMealEditorView: View {
                     .keyboardType(.decimalPad)
                 Text(component.wrappedValue.unit)
                     .foregroundStyle(.secondary)
-                Text("（基准 \\(component.wrappedValue.basisAmount.formatted(.number.precision(.fractionLength(0...1))))\\(component.wrappedValue.unit)）")
+                Text("（基准 \(component.wrappedValue.basisAmount.formatted(.number.precision(.fractionLength(0...1))))\(component.wrappedValue.unit)）")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -191,18 +191,18 @@ struct CompoundMealServingEditorView: View {
 
                 Section("本次摄入估算") {
                     let nutrition = previewNutrition
-                    LabeledContent("能量", value: "\\(nutrition.calories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
+                    LabeledContent("能量", value: "\(nutrition.calories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
                     if let protein = nutrition.protein {
-                        LabeledContent("蛋白质", value: "\\(protein.formatted(.number.precision(.fractionLength(0...1)))) g")
+                        LabeledContent("蛋白质", value: "\(protein.formatted(.number.precision(.fractionLength(0...1)))) g")
                     }
                     if let carbohydrates = nutrition.carbohydrates {
-                        LabeledContent("碳水", value: "\\(carbohydrates.formatted(.number.precision(.fractionLength(0...1)))) g")
+                        LabeledContent("碳水", value: "\(carbohydrates.formatted(.number.precision(.fractionLength(0...1)))) g")
                     }
                     if let fat = nutrition.fat {
-                        LabeledContent("脂肪", value: "\\(fat.formatted(.number.precision(.fractionLength(0...1)))) g")
+                        LabeledContent("脂肪", value: "\(fat.formatted(.number.precision(.fractionLength(0...1)))) g")
                     }
                     if let sodium = nutrition.sodium {
-                        LabeledContent("钠", value: "\\(sodium.formatted(.number.precision(.fractionLength(0...1)))) mg")
+                        LabeledContent("钠", value: "\(sodium.formatted(.number.precision(.fractionLength(0...1)))) mg")
                     }
                     Text("份数会等比例缩放组合内所有食材，保存后营养值会作为本次进食快照保留。")
                         .font(.footnote)
