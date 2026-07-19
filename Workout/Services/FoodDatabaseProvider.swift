@@ -1,4 +1,3 @@
-/Users/marcos/.rvm/scripts/rvm:29: operation not permitted: ps
 import Foundation
 
 /// A normalized product returned by a barcode database. Values are expressed
