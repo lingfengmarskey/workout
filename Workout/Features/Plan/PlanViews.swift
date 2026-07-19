@@ -1,3 +1,4 @@
+/Users/marcos/.rvm/scripts/rvm:29: operation not permitted: ps
 import SwiftData
 import SwiftUI
 
@@ -409,7 +410,7 @@ struct MealPlanDetailView: View {
             sodiumPerBasis: template.sodiumPerBasis,
             originalEnergyPerBasis: template.caloriesPerBasis,
             originalEnergyUnit: .kcal,
-            dataSource: .template,
+            dataSource: template.source == .barcodeDatabase ? .barcodeDatabase : .template,
             confidence: templateConfidenceScore(template.confidence),
             isConfirmed: true
         )
@@ -997,3 +998,4 @@ struct WorkoutPlanDetailView: View {
         ].joined(separator: "|")
     }
 }
+
