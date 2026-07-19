@@ -561,26 +561,29 @@ private struct ActualFoodEntryEditorView: View {
                 }
 
                 Section {
-                    TextField("营养基准数量，例如 100", text: $basisAmount)
-                        .keyboardType(.decimalPad)
-                    HStack {
-                        TextField("每基准量能量", text: $energyValue)
-                            .keyboardType(.decimalPad)
-                        Picker("能量单位", selection: $energyUnit) {
-                            ForEach(FoodEnergyUnit.allCases) { item in
-                                Text(item.displayName).tag(item)
+                    NutritionNumberField(label: "营养基准数量", placeholder: "例如 100", text: $basisAmount)
+                    LabeledContent("每基准量能量") {
+                        HStack {
+                            TextField("例如 116", text: $energyValue)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .onChange(of: energyValue) { _, newValue in
+                                    let clamped = NutritionDecimalInput.clamp(newValue)
+                                    if clamped != newValue { energyValue = clamped }
+                                }
+                            Picker("能量单位", selection: $energyUnit) {
+                                ForEach(FoodEnergyUnit.allCases) { item in
+                                    Text(item.displayName).tag(item)
+                                }
                             }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
                         }
-                        .pickerStyle(.menu)
                     }
-                    TextField("蛋白质（g，可选）", text: $protein)
-                        .keyboardType(.decimalPad)
-                    TextField("碳水（g，可选）", text: $carbohydrates)
-                        .keyboardType(.decimalPad)
-                    TextField("脂肪（g，可选）", text: $fat)
-                        .keyboardType(.decimalPad)
-                    TextField("钠（mg，可选）", text: $sodium)
-                        .keyboardType(.decimalPad)
+                    NutritionNumberField(label: "蛋白质（g）", placeholder: "可选", text: $protein)
+                    NutritionNumberField(label: "碳水（g）", placeholder: "可选", text: $carbohydrates)
+                    NutritionNumberField(label: "脂肪（g）", placeholder: "可选", text: $fat)
+                    NutritionNumberField(label: "钠（mg）", placeholder: "可选", text: $sodium)
                 } header: {
                     Text("营养快照")
                 } footer: {
