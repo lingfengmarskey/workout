@@ -5,9 +5,11 @@ struct FoodTemplatePickerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query private var templates: [FoodTemplate]
+    @Query private var compoundTemplates: [CompoundMealTemplate]
 
     let mealSlot: MealSlot
     let onSelect: (FoodTemplate) -> Void
+    let onSelectCompound: (CompoundMealTemplate) -> Void
     let onManualEntry: () -> Void
     let barcodeProvider: any FoodDatabaseProvider
 
@@ -19,15 +21,18 @@ struct FoodTemplatePickerView: View {
     @State private var scannerError: String?
     @State private var isLookingUpBarcode = false
     @State private var ocrFlowPresented = false
+    @State private var compoundEditorPresented = false
 
     init(
         mealSlot: MealSlot,
         onSelect: @escaping (FoodTemplate) -> Void,
         onManualEntry: @escaping () -> Void,
+        onSelectCompound: @escaping (CompoundMealTemplate) -> Void = { _ in },
         barcodeProvider: any FoodDatabaseProvider = OpenFoodFactsProvider()
     ) {
         self.mealSlot = mealSlot
         self.onSelect = onSelect
+        self.onSelectCompound = onSelectCompound
         self.onManualEntry = onManualEntry
         self.barcodeProvider = barcodeProvider
     }
@@ -35,7 +40,7 @@ struct FoodTemplatePickerView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if visibleTemplates.isEmpty {
+                if visibleTemplates.isEmpty && compoundTemplates.isEmpty {
                     ContentUnavailableView {
                         Label(emptyTitle, systemImage: emptySystemImage)
                     } description: {
@@ -43,10 +48,13 @@ struct FoodTemplatePickerView: View {
                     } actions: {
                         Button("手动输入") { onManualEntry() }
                             .buttonStyle(.borderedProminent)
+                        Button("创建组合菜品") { compoundEditorPresented = true }
+                            .buttonStyle(.bordered)
                     }
                 } else {
                     List {
-                        Section {
+                        if !visibleTemplates.isEmpty {
+                            Section {
                             ForEach(visibleTemplates) { template in
                                 Button {
                                     template.markUsed()
@@ -78,6 +86,47 @@ struct FoodTemplatePickerView: View {
                             }
                         } header: {
                             Text("选择后只需填写本次实际数量")
+                        }
+                        }
+
+                        Section("组合菜品") {
+                            Button {
+                                compoundEditorPresented = true
+                            } label: {
+                                Label("创建组合菜品", systemImage: "plus.circle")
+                            }
+
+                            ForEach(compoundTemplates.sorted { lhs, rhs in
+                                (lhs.lastUsedAt ?? lhs.updatedAt) > (rhs.lastUsedAt ?? rhs.updatedAt)
+                            }) { template in
+                                Button {
+                                    template.markUsed()
+                                    try? modelContext.save()
+                                    onSelectCompound(template)
+                                } label: {
+                                    compoundRow(template)
+                                }
+                                .buttonStyle(.plain)
+                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                    Button {
+                                        template.isFavorite.toggle()
+                                        template.updatedAt = .now
+                                        try? modelContext.save()
+                                    } label: {
+                                        Label(
+                                            template.isFavorite ? "取消收藏" : "收藏",
+                                            systemImage: template.isFavorite ? "star.slash" : "star"
+                                        )
+                                    }
+                                    .tint(.yellow)
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button("删除", role: .destructive) {
+                                        modelContext.delete(template)
+                                        try? modelContext.save()
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -158,6 +207,14 @@ struct FoodTemplatePickerView: View {
                     },
                     onManualEntry: { onManualEntry() }
                 )
+            }
+            .sheet(isPresented: $compoundEditorPresented) {
+                CompoundMealEditorView { name, components in
+                    let template = CompoundMealTemplate(name: name, components: components)
+                    modelContext.insert(template)
+                    try? modelContext.save()
+                    compoundEditorPresented = false
+                }
             }
             .overlay {
                 if isLookingUpBarcode {
@@ -281,5 +338,27 @@ struct FoodTemplatePickerView: View {
         let calories = "\(template.caloriesPerBasis.formatted(.number.precision(.fractionLength(0...1)))) kcal"
         return [brand, amount, calories].compactMap { $0 }.joined(separator: " · ")
     }
+    private func compoundRow(_ template: CompoundMealTemplate) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: template.isFavorite ? "star.fill" : "square.stack.3d.up")
+                .foregroundStyle(template.isFavorite ? .yellow : Color.accentColor)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(template.name)
+                    .foregroundStyle(.primary)
+                Text("\(template.components.count) 种食材 · 每份 \(template.nutrition.calories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+    }
+
 }
 

@@ -131,6 +131,7 @@ struct MealPlanDetailView: View {
     @State private var initialSyncFingerprint: String?
     @State private var editorRequest: ActualFoodEntryEditorRequest?
     @State private var templatePickerSlot: MealSlot?
+    @State private var compoundMealRequest: CompoundMealEditorRequest?
 
     var body: some View {
         Form {
@@ -264,7 +265,19 @@ struct MealPlanDetailView: View {
                     templatePickerSlot = nil
                     let request = ActualFoodEntryEditorRequest(entry: nil, mealSlot: slot)
                     DispatchQueue.main.async { editorRequest = request }
+                },
+                onSelectCompound: { template in
+                    templatePickerSlot = nil
+                    let request = CompoundMealEditorRequest(template: template, mealSlot: slot)
+                    DispatchQueue.main.async { compoundMealRequest = request }
                 }
+            )
+        }
+        .sheet(item: $compoundMealRequest) { request in
+            CompoundMealServingEditorView(
+                template: request.template,
+                mealSlot: request.mealSlot,
+                onSave: upsertActualFoodEntry
             )
         }
     }
@@ -496,6 +509,12 @@ struct MealPlanDetailView: View {
 private struct ActualFoodEntryEditorRequest: Identifiable {
     let id = UUID()
     let entry: ActualFoodEntry?
+    let mealSlot: MealSlot
+}
+
+private struct CompoundMealEditorRequest: Identifiable {
+    let id = UUID()
+    let template: CompoundMealTemplate
     let mealSlot: MealSlot
 }
 
