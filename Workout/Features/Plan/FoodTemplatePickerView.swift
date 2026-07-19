@@ -18,6 +18,7 @@ struct FoodTemplatePickerView: View {
     @State private var barcodeError: String?
     @State private var scannerError: String?
     @State private var isLookingUpBarcode = false
+    @State private var ocrFlowPresented = false
 
     init(
         mealSlot: MealSlot,
@@ -97,6 +98,14 @@ struct FoodTemplatePickerView: View {
                     .accessibilityLabel("扫描包装食品条码")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        ocrFlowPresented = true
+                    } label: {
+                        Image(systemName: "doc.text.viewfinder")
+                    }
+                    .accessibilityLabel("拍摄营养成分表")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         ForEach(FoodTemplateListFilter.allCases) { item in
                             Button {
@@ -138,6 +147,16 @@ struct FoodTemplatePickerView: View {
                         barcodeProduct = nil
                         onManualEntry()
                     }
+                )
+            }
+            .sheet(isPresented: $ocrFlowPresented) {
+                NutritionLabelOCRFlowView(
+                    onConfirm: { template in
+                        modelContext.insert(template)
+                        try? modelContext.save()
+                        onSelect(template)
+                    },
+                    onManualEntry: { onManualEntry() }
                 )
             }
             .overlay {
