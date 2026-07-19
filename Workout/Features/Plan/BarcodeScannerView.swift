@@ -87,6 +87,11 @@ final class BarcodeScannerViewController: UIViewController, AVCaptureMetadataOut
 
             let layer = AVCaptureVideoPreviewLayer(session: session)
             layer.videoGravity = .resizeAspectFill
+            // Session is configured from viewDidAppear, after the last
+            // viewDidLayoutSubviews ran (when previewLayer was still nil), so set
+            // the frame here too — otherwise the layer stays at .zero and the
+            // preview is black until some later layout pass happens to fire.
+            layer.frame = view.bounds
             view.layer.insertSublayer(layer, at: 0)
             previewLayer = layer
             DispatchQueue.global(qos: .userInitiated).async { self.session.startRunning() }
