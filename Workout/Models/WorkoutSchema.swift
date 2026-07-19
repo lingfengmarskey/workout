@@ -71,7 +71,8 @@ enum WorkoutMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: WorkoutSchemaV3.self, toVersion: WorkoutSchemaV4.self),
             .lightweight(fromVersion: WorkoutSchemaV4.self, toVersion: WorkoutSchemaV5.self),
             .lightweight(fromVersion: WorkoutSchemaV5.self, toVersion: WorkoutSchemaV6.self),
-            .lightweight(fromVersion: WorkoutSchemaV6.self, toVersion: WorkoutSchemaV7.self)
+            .lightweight(fromVersion: WorkoutSchemaV6.self, toVersion: WorkoutSchemaV7.self),
+            .lightweight(fromVersion: WorkoutSchemaV7.self, toVersion: WorkoutSchemaV8.self)
         ]
     }
 }
