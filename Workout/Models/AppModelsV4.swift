@@ -22,6 +22,12 @@ final class WeightLossPlan {
     var statusRaw: String
     var createdAt: Date
     var updatedAt: Date
+    /// Distinguishes the corrected V4 namespace from the structurally
+    /// identical V2/V3 model snapshot. SwiftData uses the model checksum when
+    /// validating migration stages, so a persisted default keeps V3 → V4 a
+    /// valid lightweight migration instead of treating both versions as the
+    /// same schema.
+    var schemaMigrationMarker: Int = 4
     var syncRevision: Int = 0
 
     init(
