@@ -45,5 +45,19 @@ final class NutritionLabelParserTests: XCTestCase {
         // Energy was never parsed, so it must not appear in the confidence map.
         XCTAssertNil(result.fieldConfidences[.energy])
     }
+
+    func testCarbohydrateLineDoesNotLeakIntoSugar() {
+        let result = NutritionLabelParser.parse("每100克\n能量 116 千卡\n碳水化合物（含糖）20克")
+
+        XCTAssertEqual(result.carbohydrates ?? -1, 20, accuracy: 0.001)
+        XCTAssertNil(result.sugar)
+    }
+
+    func testStandaloneSugarRowStillParses() {
+        let result = NutritionLabelParser.parse("每100克\n能量 116 千卡\n碳水化合物 20克\n糖 5克")
+
+        XCTAssertEqual(result.carbohydrates ?? -1, 20, accuracy: 0.001)
+        XCTAssertEqual(result.sugar ?? -1, 5, accuracy: 0.001)
+    }
 }
 

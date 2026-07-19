@@ -74,12 +74,17 @@ enum NutritionLabelParser {
             fieldConfidences: [:]
         )
 
+        let carbohydrateAliases = ["carbohydrate", "carbs", "碳水化合物", "碳水", "炭水化物"]
         for line in lines {
             parseEnergy(line, into: &result)
             parseNutrient(line, aliases: ["protein", "蛋白质", "蛋白", "たんぱく質", "タンパク質"], field: .protein, into: &result)
             parseNutrient(line, aliases: ["fat", "脂肪", "脂質"], field: .fat, into: &result)
-            parseNutrient(line, aliases: ["carbohydrate", "carbs", "碳水化合物", "碳水", "炭水化物"], field: .carbohydrates, into: &result)
-            parseNutrient(line, aliases: ["sugars", "sugar", "糖", "糖类", "糖類"], field: .sugar, into: &result)
+            parseNutrient(line, aliases: carbohydrateAliases, field: .carbohydrates, into: &result)
+            // The sugar alias "糖" is a substring of "碳水化合物（含糖）"; skip sugar on a
+            // line already claimed by carbohydrates so the carb value isn't duplicated as sugar.
+            if !containsAlias(line, aliases: carbohydrateAliases) {
+                parseNutrient(line, aliases: ["sugars", "sugar", "糖", "糖类", "糖類"], field: .sugar, into: &result)
+            }
             parseNutrient(line, aliases: ["fiber", "dietary fiber", "膳食纤维", "膳食纖維", "食物繊維"], field: .fiber, into: &result)
             parseNutrient(line, aliases: ["sodium", "钠", "鈉", "ナトリウム"], field: .sodium, into: &result, multiplier: 1)
         }
