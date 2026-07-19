@@ -29,10 +29,10 @@ struct BarcodeFoodConfirmationView: View {
         _brand = State(initialValue: product.brand)
         _basisAmount = State(initialValue: String(product.basisAmount))
         _calories = State(initialValue: String(product.caloriesPerBasis))
-        _protein = State(initialValue: product.proteinPerBasis.map(String.init) ?? "")
-        _carbohydrates = State(initialValue: product.carbohydratesPerBasis.map(String.init) ?? "")
-        _fat = State(initialValue: product.fatPerBasis.map(String.init) ?? "")
-        _sodium = State(initialValue: product.sodiumPerBasis.map(String.init) ?? "")
+        _protein = State(initialValue: product.proteinPerBasis.map { String($0) } ?? "")
+        _carbohydrates = State(initialValue: product.carbohydratesPerBasis.map { String($0) } ?? "")
+        _fat = State(initialValue: product.fatPerBasis.map { String($0) } ?? "")
+        _sodium = State(initialValue: product.sodiumPerBasis.map { String($0) } ?? "")
     }
 
     var body: some View {
