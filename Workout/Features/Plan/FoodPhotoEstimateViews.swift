@@ -196,23 +196,7 @@ struct FoodPhotoEstimateConfirmationView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach($candidates) { $candidate in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    TextField("食物名称", text: $candidate.foodName)
-                                    Text("可信度 \(Int(candidate.confidence * 100))%")
-                                        .font(.caption)
-                                        .foregroundStyle(.orange)
-                                }
-                                HStack {
-                                    TextField("数量", text: numberBinding($candidate.amount))
-                                        .keyboardType(.decimalPad)
-                                    Text(candidate.unit)
-                                        .foregroundStyle(.secondary)
-                                    Text("· \(candidate.calories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
+                            FoodPhotoEstimateCandidateEditor(candidate: $candidate)
                         }
                         .onDelete { candidates.remove(atOffsets: $0) }
                     }
@@ -253,13 +237,6 @@ struct FoodPhotoEstimateConfirmationView: View {
     }
 
     private var totalCalories: Double { candidates.reduce(0) { $0 + $1.calories } }
-
-    private func numberBinding(_ value: Binding<Double>) -> Binding<String> {
-        Binding(
-            get: { value.wrappedValue.formatted(.number.precision(.fractionLength(0...2))) },
-            set: { value.wrappedValue = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0 }
-        )
-    }
 
     private func totalOptional(_ values: [Double?]) -> Double? {
         guard values.contains(where: { $0 != nil }) else { return nil }
@@ -302,5 +279,36 @@ struct FoodPhotoEstimateConfirmationView: View {
         }
         onConfirm(entries)
         dismiss()
+    }
+}
+
+private struct FoodPhotoEstimateCandidateEditor: View {
+    @Binding var candidate: FoodPhotoEstimateCandidate
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                TextField("食物名称", text: $candidate.foodName)
+                Text("可信度 \(Int(candidate.confidence * 100))%")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            HStack {
+                TextField("数量", text: amountBinding)
+                    .keyboardType(.decimalPad)
+                Text(candidate.unit)
+                    .foregroundStyle(.secondary)
+                Text("· \(candidate.calories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var amountBinding: Binding<String> {
+        Binding(
+            get: { candidate.amount.formatted(.number.precision(.fractionLength(0...2))) },
+            set: { candidate.amount = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0 }
+        )
     }
 }
