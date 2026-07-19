@@ -441,19 +441,29 @@ struct BodyRecordView: View {
     }
 
     private var syncFingerprint: String {
-        [
-            record.actualWeight.map { String($0) } ?? "",
-            record.waist.map { String($0) } ?? "",
-            record.sleepHours.map { String($0) } ?? "",
-            record.morningEnergy.map { String($0) } ?? "",
-            record.frontPhotoPath ?? "",
-            record.sidePhotoPath ?? "",
-            record.backPhotoPath ?? "",
-            record.frontPhotoHash ?? "",
-            record.sidePhotoHash ?? "",
-            record.backPhotoHash ?? "",
-            record.note
-        ].joined(separator: "|")
+        var values: [String] = []
+        values.append(fingerprintValue(record.actualWeight))
+        values.append(fingerprintValue(record.waist))
+        values.append(fingerprintValue(record.sleepHours))
+        values.append(fingerprintValue(record.morningEnergy))
+        values.append(record.frontPhotoPath ?? "")
+        values.append(record.sidePhotoPath ?? "")
+        values.append(record.backPhotoPath ?? "")
+        values.append(record.frontPhotoHash ?? "")
+        values.append(record.sidePhotoHash ?? "")
+        values.append(record.backPhotoHash ?? "")
+        values.append(record.note)
+        return values.joined(separator: "|")
+    }
+
+    private func fingerprintValue(_ value: Double?) -> String {
+        guard let value else { return "" }
+        return String(value)
+    }
+
+    private func fingerprintValue(_ value: Int?) -> String {
+        guard let value else { return "" }
+        return String(value)
     }
 
     private func readableMessage(for error: Error) -> String {
