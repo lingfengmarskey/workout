@@ -9,9 +9,27 @@ struct FoodTemplatePickerView: View {
     let mealSlot: MealSlot
     let onSelect: (FoodTemplate) -> Void
     let onManualEntry: () -> Void
+    let barcodeProvider: any FoodDatabaseProvider
 
     @State private var filter: FoodTemplateListFilter = .recent
     @State private var searchText = ""
+    @State private var scannerPresented = false
+    @State private var barcodeProduct: BarcodeFoodProduct?
+    @State private var barcodeError: String?
+    @State private var scannerError: String?
+    @State private var isLookingUpBarcode = false
+
+    init(
+        mealSlot: MealSlot,
+        onSelect: @escaping (FoodTemplate) -> Void,
+        onManualEntry: @escaping () -> Void,
+        barcodeProvider: any FoodDatabaseProvider = OpenFoodFactsProvider()
+    ) {
+        self.mealSlot = mealSlot
+        self.onSelect = onSelect
+        self.onManualEntry = onManualEntry
+        self.barcodeProvider = barcodeProvider
+    }
 
     var body: some View {
         NavigationStack {
@@ -71,6 +89,14 @@ struct FoodTemplatePickerView: View {
                     Button("取消") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        scannerPresented = true
+                    } label: {
+                        Image(systemName: "barcode.viewfinder")
+                    }
+                    .accessibilityLabel("扫描包装食品条码")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         ForEach(FoodTemplateListFilter.allCases) { item in
                             Button {
@@ -84,6 +110,62 @@ struct FoodTemplatePickerView: View {
                     }
                     .accessibilityLabel("切换食物模板筛选，当前为\(filter.title)")
                 }
+            }
+            .sheet(isPresented: $scannerPresented) {
+                BarcodeScannerView(
+                    onCode: { code in
+                        scannerPresented = false
+                        lookupBarcode(code)
+                    },
+                    onError: { message in
+                        scannerPresented = false
+                        scannerError = message
+                    },
+                    onCancel: { scannerPresented = false }
+                )
+                .ignoresSafeArea()
+            }
+            .sheet(item: $barcodeProduct) { product in
+                BarcodeFoodConfirmationView(
+                    product: product,
+                    onConfirm: { template in
+                        modelContext.insert(template)
+                        try? modelContext.save()
+                        barcodeProduct = nil
+                        onSelect(template)
+                    },
+                    onManualEntry: {
+                        barcodeProduct = nil
+                        onManualEntry()
+                    }
+                )
+            }
+            .overlay {
+                if isLookingUpBarcode {
+                    ProgressView("正在查询条码…")
+                        .padding(24)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                }
+            }
+            .alert("无法扫描条码", isPresented: Binding(
+                get: { scannerError != nil },
+                set: { if !$0 { scannerError = nil } }
+            )) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(scannerError ?? "请稍后重试。")
+            }
+            .alert("未找到食品", isPresented: Binding(
+                get: { barcodeError != nil },
+                set: { if !$0 { barcodeError = nil } }
+            )) {
+                Button("手动输入") {
+                    barcodeError = nil
+                    onManualEntry()
+                }
+                Button("取消", role: .cancel) { barcodeError = nil }
+            } message: {
+                Text(barcodeError ?? "可以手动输入营养快照，或稍后重试。")
             }
             .safeAreaInset(edge: .bottom) {
                 Button {
@@ -106,6 +188,33 @@ struct FoodTemplatePickerView: View {
             filter: filter,
             query: searchText
         )
+    }
+
+    private func lookupBarcode(_ code: String) {
+        guard let normalized = BarcodeNormalizer.normalize(code) else {
+            barcodeError = "条码格式不正确。"
+            return
+        }
+        if let local = templates.first(where: { $0.barcode == normalized }) {
+            local.markUsed()
+            try? modelContext.save()
+            onSelect(local)
+            return
+        }
+
+        isLookingUpBarcode = true
+        Task {
+            defer { isLookingUpBarcode = false }
+            do {
+                guard let product = try await barcodeProvider.lookup(barcode: normalized) else {
+                    barcodeError = "没有找到 \(normalized) 对应的食品。你可以改为手动输入，保存后下次可直接选择。"
+                    return
+                }
+                barcodeProduct = product
+            } catch {
+                barcodeError = "查询失败：\(error.localizedDescription)\n网络不可用时仍可使用手动输入。"
+            }
+        }
     }
 
     private var emptyTitle: String {
@@ -154,3 +263,4 @@ struct FoodTemplatePickerView: View {
         return [brand, amount, calories].compactMap { $0 }.joined(separator: " · ")
     }
 }
+
