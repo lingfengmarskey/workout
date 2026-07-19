@@ -154,7 +154,11 @@ final class CloudRecordMergeServiceTests: XCTestCase {
     }
 
     private func makeContext() throws -> ModelContext {
-        let schema = Schema(versionedSchema: WorkoutSchemaV2.self)
+        // The merge service operates on the current V4 model typealiases.
+        // Creating a V2 container here makes SwiftData return V2 instances,
+        // which cannot be fetched or cast as the current WeightLossPlan and
+        // SyncTombstone types on newer Xcode releases.
+        let schema = Schema(versionedSchema: WorkoutSchemaV4.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         return try ModelContext(ModelContainer(for: schema, configurations: [configuration]))
     }
