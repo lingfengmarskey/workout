@@ -7,7 +7,7 @@ struct WorkoutApp: App {
     private let modelContainer: ModelContainer
 
     init() {
-        let schema = Schema(versionedSchema: WorkoutSchemaV6.self)
+        let schema = Schema(versionedSchema: WorkoutSchemaV7.self)
         // CloudKit is used as an explicit sync transport by CloudSyncEngine.
         // Keep SwiftData's local store out of automatic CloudKit mirroring;
         // automatic mirroring rejects this schema's unique constraints and
