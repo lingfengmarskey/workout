@@ -32,7 +32,24 @@ xcodegen generate
 open Workout.xcodeproj
 ```
 
-在 Xcode 中选择 `Workout` Scheme 和任意 iOS 17+ 模拟器运行。
+在 Xcode 中选择 `Workout` Scheme 和任意 iOS 17+ 模拟器运行。模拟器无需代码签名。
+
+## 代码签名（真机 / 归档）
+
+App target（`Workout`）使用**手动签名**，证书与描述文件由 [fastlane match](https://docs.fastlane.tools/actions/match/) 管理，加密存放在私有仓库 `workout-certificates`：
+
+- Debug → `Apple Development` + 描述文件 `match Development com.lingfengmarskey.workout`
+- Release → `Apple Distribution` + 描述文件 `match AppStore com.lingfengmarskey.workout`
+
+首次或换机器前，先安装并拉取证书（详见 [代码签名说明](docs/CODE-SIGNING.md)）：
+
+```bash
+brew install fastlane
+fastlane match development --readonly
+fastlane match appstore --readonly
+```
+
+`WorkoutTests` 仍为自动签名（match 不管理其 bundle id，模拟器测试也不需要签名）。
 
 ## 仓库结构
 
@@ -61,6 +78,7 @@ project.yml            XcodeGen 工程定义
 
 - [MVP 产品需求文档](docs/MVP-PRD.md)
 - [开发路线](docs/ROADMAP.md)
+- [代码签名（fastlane match）](docs/CODE-SIGNING.md)
 
 ## 状态
 

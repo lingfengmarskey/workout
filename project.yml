@@ -42,11 +42,19 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lingfengmarskey.workout
         PRODUCT_NAME: Workout
-        CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: E393H8D2JP
-        CODE_SIGN_IDENTITY: Apple Development
         CODE_SIGN_ENTITLEMENTS: Workout/Workout.entitlements
         TARGETED_DEVICE_FAMILY: "1"
+        # Manual signing via fastlane match. Profiles are installed by running
+        # `fastlane match development|appstore` (see docs/CODE-SIGNING.md).
+        CODE_SIGN_STYLE: Manual
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+          PROVISIONING_PROFILE_SPECIFIER: match Development com.lingfengmarskey.workout
+        Release:
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: match AppStore com.lingfengmarskey.workout
   WorkoutTests:
     type: bundle.unit-test
     platform: iOS
@@ -58,6 +66,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lingfengmarskey.workout.tests
         GENERATE_INFOPLIST_FILE: true
+        # Kept on automatic signing: match does not manage the .tests bundle id,
+        # and simulator test runs do not need a signing identity at all.
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: E393H8D2JP
 schemes:
