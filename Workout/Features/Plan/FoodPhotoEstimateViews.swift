@@ -190,7 +190,7 @@ struct FoodPhotoEstimateConfirmationView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("候选食物") {
+                Section {
                     if candidates.isEmpty {
                         Text("没有保留候选，请改用手动输入。")
                             .foregroundStyle(.secondary)
@@ -200,14 +200,16 @@ struct FoodPhotoEstimateConfirmationView: View {
                         }
                         .onDelete { candidates.remove(atOffsets: $0) }
                     }
+                } header: {
+                    Text("候选食物")
                 } footer: {
                     Text("来源：照片估算（演示 provider）。估算值不是精确测量，不用于医疗诊断。")
                 }
 
                 Section("本次合计") {
-                    LabeledContent("能量", value: "(totalCalories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
+                    LabeledContent("能量", value: "\(totalCalories.formatted(.number.precision(.fractionLength(0...1)))) kcal")
                     if let protein = totalOptional(candidates.map(\.protein)) {
-                        LabeledContent("蛋白质", value: "(protein.formatted(.number.precision(.fractionLength(0...1)))) g")
+                        LabeledContent("蛋白质", value: "\(protein.formatted(.number.precision(.fractionLength(0...1)))) g")
                     }
                 }
 
