@@ -1,0 +1,51 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Select an available iOS simulator
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator_name="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {print $1; exit}' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+          if [[ -z "$simulator_name" ]]; then
+            echo "No available iPhone simulator was found." >&2
+            xcrun simctl list devices available >&2 || true
+            exit 1
+          fi
+          echo "name=$simulator_name" >> "$GITHUB_OUTPUT"
+          echo "Using simulator: $simulator_name"
+
+      - name: Run unit tests
+        run: |
+          xcodebuild test \
+            -project Workout.xcodeproj \
+            -scheme Workout \
+            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}" \
+            -derivedDataPath "$RUNNER_TEMP/WorkoutDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
