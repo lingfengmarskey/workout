@@ -91,7 +91,8 @@ final class ActualFoodEntryTests: XCTestCase {
         )
 
         XCTAssertEqual(entry.calories, 100, accuracy: 0.0001)
-        XCTAssertEqual(entry.originalEnergyPerBasis, 418.4, accuracy: 0.0001)
+        XCTAssertNotNil(entry.originalEnergyPerBasis)
+        XCTAssertEqual(entry.originalEnergyPerBasis ?? -1, 418.4, accuracy: 0.0001)
         XCTAssertEqual(entry.originalEnergyUnit, .kJ)
     }
 

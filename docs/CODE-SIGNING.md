@@ -40,11 +40,12 @@ fastlane match appstore --readonly
 
 ## 与 Xcode 工程的关系
 
-当前 `project.yml` 使用 `CODE_SIGN_STYLE: Automatic`。match 生成的描述文件命名为
-`match Development com.lingfengmarskey.workout` 等。若要让构建改用 match 管理的手动签名，
-需在 `project.yml` 中把对应 target 切换为 `CODE_SIGN_STYLE: Manual` 并指定
-`PROVISIONING_PROFILE_SPECIFIER`，再 `xcodegen generate`。这一步尚未做，等需要稳定
-CI/归档流程时再切换。
+当前 `project.yml` 已使用 match 管理的手动签名：
+
+- Debug：`Apple Development` + `match Development com.lingfengmarskey.workout`
+- Release：`Apple Distribution` + `match AppStore com.lingfengmarskey.workout`
+
+运行 `xcodegen generate` 后，Xcode 工程会使用对应配置的 profile。DeployGate 的 Dev 工作流使用 Debug 配置，并在归档前执行 `fastlane match development --readonly`。
 
 ## 为什么不用 bundler / rvm 的 Ruby
 

@@ -79,6 +79,7 @@ project.yml            XcodeGen 工程定义
 - [MVP 产品需求文档](docs/MVP-PRD.md)
 - [开发路线](docs/ROADMAP.md)
 - [代码签名（fastlane match）](docs/CODE-SIGNING.md)
+- [CI/CD、IPA 打包与 DeployGate](docs/CI-CD.md)
 
 ## 状态
 

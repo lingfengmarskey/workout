@@ -10,7 +10,11 @@ final class PhotoSyncMetadata {
     var contentHash: String?
     var updatedAt: Date
     var deviceID: String
-    var isDeleted: Bool
+    // `isDeleted` collides with Core Data's internal deletion state on some
+    // Xcode/iOS combinations and is read back as false after a save. Keep the
+    // external API stable while persisting the flag under a neutral property
+    // name; originalName preserves existing V3/V4 stores during migration.
+    @Attribute(originalName: "isDeleted") var deletedFlag: Bool
 
     init(
         bodyID: UUID,
@@ -26,7 +30,12 @@ final class PhotoSyncMetadata {
         self.contentHash = contentHash
         self.updatedAt = updatedAt
         self.deviceID = deviceID
-        self.isDeleted = isDeleted
+        self.deletedFlag = isDeleted
+    }
+
+    var isDeleted: Bool {
+        get { deletedFlag }
+        set { deletedFlag = newValue }
     }
 
     var angle: CloudPhotoAngle {

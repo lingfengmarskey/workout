@@ -1,0 +1,187 @@
+name: Package and DeployGate (Dev)
+
+on:
+  push:
+    tags:
+      - 'dev-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Re-run tests for tagged commit
+    uses: ./.github/workflows/test.yml
+
+  package:
+    name: Archive, export, and upload IPA
+    needs: tests
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Install fastlane and XcodeGen
+        run: brew install fastlane xcodegen
+
+      - name: Configure match repository access
+        shell: bash
+        env:
+          MATCH_GIT_PRIVATE_KEY: ${{ secrets.MATCH_GIT_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MATCH_GIT_PRIVATE_KEY:-}" ]]; then
+            echo "MATCH_GIT_PRIVATE_KEY is required to read the private match repository." >&2
+            exit 1
+          fi
+
+          key_path="$RUNNER_TEMP/match-deploy-key"
+          printf '%s\n' "$MATCH_GIT_PRIVATE_KEY" > "$key_path"
+          chmod 600 "$key_path"
+          mkdir -p "$HOME/.ssh"
+          ssh-keyscan -H github.com >> "$HOME/.ssh/known_hosts"
+          echo "GIT_SSH_COMMAND=ssh -i $key_path -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" >> "$GITHUB_ENV"
+
+      - name: Fetch match signing assets
+        shell: bash
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MATCH_PASSWORD:-}" ]]; then
+            echo "MATCH_PASSWORD is required to decrypt the match repository." >&2
+            exit 1
+          fi
+          fastlane match development --readonly
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Archive development build
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project Workout.xcodeproj \
+            -scheme Workout \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Workout.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/WorkoutDerivedData"
+
+      - name: Export signed IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>signingCertificate</key>
+            <string>Apple Development</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.lingfengmarskey.workout</key>
+              <string>match Development com.lingfengmarskey.workout</string>
+            </dict>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Workout.xcarchive" \
+            -exportPath "$RUNNER_TEMP/Workout-export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Workout-${{ github.ref_name }}-ipa
+          path: ${{ runner.temp }}/Workout-export/Workout.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload IPA to DeployGate
+        id: deploygate
+        shell: bash
+        env:
+          DEPLOYGATE_API_TOKEN: ${{ secrets.DEPLOYGATE_API_TOKEN }}
+          DEPLOYGATE_OWNER_NAME: ${{ secrets.DEPLOYGATE_OWNER_NAME }}
+          DEPLOYGATE_DISTRIBUTION_KEY: ${{ secrets.DEPLOYGATE_DISTRIBUTION_KEY }}
+        run: |
+          set -euo pipefail
+          response_path="$RUNNER_TEMP/deploygate-response.json"
+          upload_args=(
+            --form "file=@$RUNNER_TEMP/Workout-export/Workout.ipa"
+            --form-string "message=Workout dev build $GITHUB_REF_NAME ($GITHUB_SHA)"
+            --form-string "release_note=Workout dev build $GITHUB_REF_NAME"
+            --form-string "disable_notify=true"
+          )
+
+          if [[ -n "${DEPLOYGATE_DISTRIBUTION_KEY:-}" ]]; then
+            upload_args+=(--form-string "distribution_key=$DEPLOYGATE_DISTRIBUTION_KEY")
+          else
+            upload_args+=(--form-string "distribution_name=dev")
+          fi
+
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --url "https://deploygate.com/api/users/${DEPLOYGATE_OWNER_NAME}/apps" \
+            --header "Authorization: Bearer ${DEPLOYGATE_API_TOKEN}" \
+            "${upload_args[@]}" \
+            > "$response_path"
+
+          if jq -e '.error == true' "$response_path" >/dev/null; then
+            cat "$response_path"
+            exit 1
+          fi
+
+          download_url="$(jq -r '.results.file // empty' "$response_path")"
+          if [[ -z "$download_url" || "$download_url" == "null" ]]; then
+            echo "DeployGate response did not contain results.file:" >&2
+            cat "$response_path" >&2
+            exit 1
+          fi
+
+          if [[ -n "${DEPLOYGATE_DISTRIBUTION_KEY:-}" ]]; then
+            distribution_url="https://deploygate.com/distributions/${DEPLOYGATE_DISTRIBUTION_KEY}"
+          else
+            distribution_url="$download_url"
+          fi
+
+          echo "download_url=$download_url" >> "$GITHUB_OUTPUT"
+          echo "distribution_url=$distribution_url" >> "$GITHUB_OUTPUT"
+          echo "DeployGate upload succeeded: $distribution_url"
+
+      - name: Email DeployGate link
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "Workout dev IPA ready - ${{ github.ref_name }}"
+          from: lingfengmarskey@gmail.com
+          to: lingfengmarskey@gmail.com
+          body: |
+            Workout 的 dev 环境 IPA 已成功打包并上传到 DeployGate。
+
+            Tag: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+
+            DeployGate 下载/分发链接：
+            ${{ steps.deploygate.outputs.distribution_url }}
+
+            直接文件链接：
+            ${{ steps.deploygate.outputs.download_url }}

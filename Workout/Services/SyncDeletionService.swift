@@ -39,6 +39,12 @@ enum SyncDeletionService {
 
         for record in bodyRecords {
             try stageDeletion(id: record.id, entityType: .bodyRecord, in: context, deletedAt: deletedAt)
+            context.delete(record)
+
+            // Photo metadata is an independent sync entity. Stage the
+            // per-angle tombstones after removing the body record so SwiftData
+            // cannot treat the pending body deletion as an object-graph change
+            // and drop newly inserted metadata during the same save.
             for angle in CloudPhotoAngle.allCases {
                 try CloudPhotoSyncService.stageLocalMutation(
                     bodyID: record.id,
@@ -48,7 +54,6 @@ enum SyncDeletionService {
                     in: context
                 )
             }
-            context.delete(record)
         }
         for meal in mealPlans {
             try stageDeletion(id: meal.id, entityType: .mealPlan, in: context, deletedAt: deletedAt)
