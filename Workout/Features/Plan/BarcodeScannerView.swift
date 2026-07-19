@@ -1,4 +1,3 @@
-/Users/marcos/.rvm/scripts/rvm:29: operation not permitted: ps
 import AVFoundation
 import SwiftUI
 
