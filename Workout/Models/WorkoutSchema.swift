@@ -61,7 +61,7 @@ enum WorkoutSchemaV4: VersionedSchema {
 
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [WorkoutSchemaV1.self, WorkoutSchemaV2.self, WorkoutSchemaV3.self, WorkoutSchemaV4.self, WorkoutSchemaV5.self, WorkoutSchemaV6.self]
+        [WorkoutSchemaV1.self, WorkoutSchemaV2.self, WorkoutSchemaV3.self, WorkoutSchemaV4.self, WorkoutSchemaV5.self, WorkoutSchemaV6.self, WorkoutSchemaV7.self]
     }
 
     static var stages: [MigrationStage] {
@@ -70,7 +70,8 @@ enum WorkoutMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: WorkoutSchemaV2.self, toVersion: WorkoutSchemaV3.self),
             .lightweight(fromVersion: WorkoutSchemaV3.self, toVersion: WorkoutSchemaV4.self),
             .lightweight(fromVersion: WorkoutSchemaV4.self, toVersion: WorkoutSchemaV5.self),
-            .lightweight(fromVersion: WorkoutSchemaV5.self, toVersion: WorkoutSchemaV6.self)
+            .lightweight(fromVersion: WorkoutSchemaV5.self, toVersion: WorkoutSchemaV6.self),
+            .lightweight(fromVersion: WorkoutSchemaV6.self, toVersion: WorkoutSchemaV7.self)
         ]
     }
 }
