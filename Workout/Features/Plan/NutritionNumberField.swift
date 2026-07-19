@@ -26,6 +26,17 @@ struct NutritionNumberField: View {
 /// `places` fraction digits. Accepts both "." and "," as the separator and
 /// leaves the user's choice in place (parsing normalizes it later).
 enum NutritionDecimalInput {
+    /// Initial field text for a value coming from a data source (barcode lookup,
+    /// OCR, a stored entry): rounded to at most `places` decimals, no grouping
+    /// separators, trailing zeros dropped.
+    static func text(from value: Double, places: Int = 2) -> String {
+        value.formatted(.number.precision(.fractionLength(0...places)).grouping(.never))
+    }
+
+    static func text(from value: Double?, places: Int = 2) -> String {
+        value.map { text(from: $0, places: places) } ?? ""
+    }
+
     static func clamp(_ input: String, places: Int = 2) -> String {
         var result = ""
         var seenSeparator = false

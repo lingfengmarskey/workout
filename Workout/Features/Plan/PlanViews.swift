@@ -532,17 +532,17 @@ private struct ActualFoodEntryEditorView: View {
         self.onSave = onSave
         self.modelContext = modelContext
         _foodName = State(initialValue: entry?.foodName ?? "")
-        _amount = State(initialValue: entry.map { String($0.amount) } ?? "")
+        _amount = State(initialValue: entry.map { NutritionDecimalInput.text(from: $0.amount) } ?? "")
         _unit = State(initialValue: entry?.unit ?? "g")
-        _basisAmount = State(initialValue: entry.map { String($0.nutritionBasisAmount) } ?? "100")
+        _basisAmount = State(initialValue: entry.map { NutritionDecimalInput.text(from: $0.nutritionBasisAmount) } ?? "100")
         _energyValue = State(initialValue: entry.map {
-            String($0.originalEnergyPerBasis ?? $0.caloriesPerBasis)
+            NutritionDecimalInput.text(from: $0.originalEnergyPerBasis ?? $0.caloriesPerBasis)
         } ?? "")
         _energyUnit = State(initialValue: entry?.originalEnergyUnit ?? .kcal)
-        _protein = State(initialValue: entry?.proteinPerBasis.map { String($0) } ?? "")
-        _carbohydrates = State(initialValue: entry?.carbohydratesPerBasis.map { String($0) } ?? "")
-        _fat = State(initialValue: entry?.fatPerBasis.map { String($0) } ?? "")
-        _sodium = State(initialValue: entry?.sodiumPerBasis.map { String($0) } ?? "")
+        _protein = State(initialValue: NutritionDecimalInput.text(from: entry?.proteinPerBasis))
+        _carbohydrates = State(initialValue: NutritionDecimalInput.text(from: entry?.carbohydratesPerBasis))
+        _fat = State(initialValue: NutritionDecimalInput.text(from: entry?.fatPerBasis))
+        _sodium = State(initialValue: NutritionDecimalInput.text(from: entry?.sodiumPerBasis))
         _saveAsTemplate = State(initialValue: false)
         _confirmedLowConfidence = State(initialValue: (entry?.confidence ?? 1) >= 1)
     }

@@ -17,4 +17,12 @@ final class NutritionDecimalInputTests: XCTestCase {
         XCTAssertEqual(NutritionDecimalInput.clamp("1a2b.3g"), "12.3")
         XCTAssertEqual(NutritionDecimalInput.clamp("12."), "12.")
     }
+
+    func testInitialTextRoundsToTwoDecimalsWithoutTrailingZeros() {
+        XCTAssertEqual(NutritionDecimalInput.text(from: 3.33333), "3.33")
+        XCTAssertEqual(NutritionDecimalInput.text(from: 116.0), "116")
+        XCTAssertEqual(NutritionDecimalInput.text(from: 0.5), "0.5")
+        XCTAssertEqual(NutritionDecimalInput.text(from: 1234.0), "1234") // no grouping separators
+        XCTAssertEqual(NutritionDecimalInput.text(from: Double?.none), "")
+    }
 }

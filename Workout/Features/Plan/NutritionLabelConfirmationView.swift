@@ -31,14 +31,14 @@ struct NutritionLabelConfirmationView: View {
         self.result = result
         self.onConfirm = onConfirm
         self.onManualEntry = onManualEntry
-        _basisAmount = State(initialValue: result.basisAmount.map { String($0) } ?? "100")
+        _basisAmount = State(initialValue: result.basisAmount.map { NutritionDecimalInput.text(from: $0) } ?? "100")
         _basisUnit = State(initialValue: result.basisUnit ?? .gram)
-        _calories = State(initialValue: result.calories.map { String($0) } ?? "")
+        _calories = State(initialValue: NutritionDecimalInput.text(from: result.calories))
         _energyUnit = State(initialValue: result.energyUnit)
-        _protein = State(initialValue: result.protein.map { String($0) } ?? "")
-        _fat = State(initialValue: result.fat.map { String($0) } ?? "")
-        _carbohydrates = State(initialValue: result.carbohydrates.map { String($0) } ?? "")
-        _sodium = State(initialValue: result.sodium.map { String($0) } ?? "")
+        _protein = State(initialValue: NutritionDecimalInput.text(from: result.protein))
+        _fat = State(initialValue: NutritionDecimalInput.text(from: result.fat))
+        _carbohydrates = State(initialValue: NutritionDecimalInput.text(from: result.carbohydrates))
+        _sodium = State(initialValue: NutritionDecimalInput.text(from: result.sodium))
     }
 
     private var requiresVerification: Bool {
