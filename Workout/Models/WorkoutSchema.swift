@@ -61,7 +61,7 @@ enum WorkoutSchemaV4: VersionedSchema {
 
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [WorkoutSchemaV1.self, WorkoutSchemaV2.self, WorkoutSchemaV3.self, WorkoutSchemaV4.self, WorkoutSchemaV5.self, WorkoutSchemaV6.self, WorkoutSchemaV7.self]
+        [WorkoutSchemaV1.self, WorkoutSchemaV2.self, WorkoutSchemaV3.self, WorkoutSchemaV4.self, WorkoutSchemaV5.self, WorkoutSchemaV6.self, WorkoutSchemaV7.self, WorkoutSchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
