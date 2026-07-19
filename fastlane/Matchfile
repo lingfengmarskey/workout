@@ -1,0 +1,31 @@
+# fastlane match configuration
+# Stores encrypted iOS signing certificates & provisioning profiles in a
+# private git repository. Docs: https://docs.fastlane.tools/actions/match/
+#
+# Usage:
+#   bundle exec fastlane match development   # development cert + profile
+#   bundle exec fastlane match appstore      # distribution cert + profile
+#
+# The first run asks for an encryption passphrase (MATCH_PASSWORD) and your
+# Apple Developer credentials, then creates and encrypts everything into the
+# storage repo below. Keep that passphrase safe — it is what decrypts the repo.
+
+git_url("git@github.com:lingfengmarskey/workout-certificates.git")
+storage_mode("git")
+
+# Default type used when no subcommand is given. Override per command, e.g.
+# `bundle exec fastlane match appstore`.
+type("development")
+
+# App(s) to manage signing for. The test bundle only needs its own development
+# profile if you run device tests; add "com.lingfengmarskey.workout.tests" to a
+# `bundle exec fastlane match development` run when that day comes.
+app_identifier(["com.lingfengmarskey.workout"])
+
+# Apple Developer team, so match never has to guess.
+team_id("E393H8D2JP")
+
+# To skip the interactive Apple ID prompt, either uncomment and set your Apple
+# ID, or (recommended, avoids 2FA) provide an App Store Connect API key via env:
+#   APP_STORE_CONNECT_API_KEY_KEY_ID / _ISSUER_ID / _KEY
+# username("your-apple-id@example.com")
