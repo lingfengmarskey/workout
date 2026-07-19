@@ -270,7 +270,7 @@ struct MealPlanDetailView: View {
                     templatePickerSlot = nil
                     let request = CompoundMealEditorRequest(template: template, mealSlot: slot)
                     DispatchQueue.main.async { compoundMealRequest = request }
-                }
+                },
                 onPhotoEstimate: { entries in
                     templatePickerSlot = nil
                     DispatchQueue.main.async {
