@@ -8,7 +8,19 @@ enum WorkoutSchemaV6: VersionedSchema {
     static var versionIdentifier = Schema.Version(6, 0, 0)
 
     static var models: [any PersistentModel.Type] {
-        WorkoutSchemaV5.models + [WorkoutSchemaV6.FoodTemplate.self]
+        // Keep the complete list explicit. Passing another schema's model
+        // array through here can make SwiftData derive the same version
+        // checksum for adjacent migration stages on newer Xcode releases.
+        [
+            WorkoutSchemaV4.WeightLossPlan.self,
+            WorkoutSchemaV4.DailyBodyRecord.self,
+            WorkoutSchemaV5.DailyMealPlan.self,
+            WorkoutSchemaV4.DailyWorkoutPlan.self,
+            WorkoutSchemaV4.SyncTombstone.self,
+            WorkoutSchemaV4.CloudSyncState.self,
+            WorkoutSchemaV4.PhotoSyncMetadata.self,
+            WorkoutSchemaV6.FoodTemplate.self
+        ]
     }
 }
 
