@@ -122,7 +122,7 @@ enum NutritionLabelParser {
     }
 
     private static func findBasis(in text: String) -> (amount: Double?, unit: FoodNutritionBasisUnit?) {
-        let pattern = "(?i)(?:每|per|pour|por)\\s*\(number)\\s*(g|克|ml|毫升|milliliter|serving|份|package|包装|pack)"
+        let pattern = "(?i)(?:每|per|pour|por)(?:\\s*(?:serving|portion|份|package|包装|pack))?\\s*\(number)\\s*(g|克|ml|毫升|milliliter|serving|份|package|包装|pack)"
         guard let match = firstMatch(pattern, in: text),
               let amount = parseNumber(match[1]),
               let unit = FoodNutritionBasisUnit.parse(match[2]) else {
