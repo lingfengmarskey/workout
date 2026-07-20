@@ -969,42 +969,7 @@ struct WorkoutPlanDetailView: View {
                 Text(plan.cardioDescription)
             }
 
-            if !plan.addedActivities.isEmpty {
-                Section("追加活动") {
-                    ForEach(plan.addedActivities) { activity in
-                        HStack(spacing: 12) {
-                            Button {
-                                setActivityCompletion(activity, completed: !activity.isCompleted)
-                            } label: {
-                                Image(systemName: activity.isCompleted ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(activity.isCompleted ? .green : .secondary)
-                            }
-                            .buttonStyle(.plain)
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(activity.activityName)
-                                    .strikethrough(activity.isCompleted)
-                                Text("来源：实际进食记录 · 约 \(activity.estimatedCalories.formatted(.number.precision(.fractionLength(0)))) kcal")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Button {
-                                activityEditTarget = activity
-                            } label: {
-                                Text("\(activity.durationMinutes) 分钟")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                    .onDelete { offsets in
-                        deleteActivities(at: offsets)
-                    }
-                }
-            }
+            addedActivitiesSection
 
             Section("拉伸与放松") {
                 Text(plan.cooldownDescription)
@@ -1088,7 +1053,14 @@ struct WorkoutPlanDetailView: View {
         } message: {
             Text("当前已记录 \(plan.actualSteps ?? 0) 步，健康 App 读取到 \(importedSteps ?? 0) 步。")
         }
-        .confirmationDialog("修改追加活动", item: $activityEditTarget) { activity in
+        .confirmationDialog(
+            "修改追加活动",
+            isPresented: Binding(
+                get: { activityEditTarget != nil },
+                set: { if !$0 { activityEditTarget = nil } }
+            ),
+            presenting: activityEditTarget
+        ) { activity in
             Button("减少 5 分钟") {
                 adjustActivityDuration(activity, by: -5)
             }
@@ -1110,6 +1082,56 @@ struct WorkoutPlanDetailView: View {
         } message: {
             Text(healthStepError ?? "")
         }
+    }
+
+    @ViewBuilder
+    private var addedActivitiesSection: some View {
+        if !plan.addedActivities.isEmpty {
+            Section("追加活动") {
+                ForEach(plan.addedActivities) { activity in
+                    activityRow(activity)
+                }
+                .onDelete { offsets in
+                    deleteActivities(at: offsets)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func activityRow(_ activity: PlannedActivityAddition) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                setActivityCompletion(activity, completed: !activity.isCompleted)
+            } label: {
+                Image(systemName: activity.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(activity.isCompleted ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(activity.activityName)
+                    .strikethrough(activity.isCompleted)
+                Text(activitySourceText(activity))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                activityEditTarget = activity
+            } label: {
+                Text("\(activity.durationMinutes) 分钟")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private func activitySourceText(_ activity: PlannedActivityAddition) -> String {
+        let kcal = activity.estimatedCalories.formatted(.number.precision(.fractionLength(0)))
+        return "来源：实际进食记录 · 约 \(kcal) kcal"
     }
 
     private func setActivityCompletion(_ activity: PlannedActivityAddition, completed: Bool) {
