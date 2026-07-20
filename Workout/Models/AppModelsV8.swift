@@ -95,6 +95,8 @@ final class DailyWorkoutPlan {
             guard let data = try? JSONEncoder().encode(newValue),
                   let json = String(data: data, encoding: .utf8) else { return }
             addedActivitiesJSON = json
+            updatedAt = .now
+            syncRevision += 1
         }
     }
 }
