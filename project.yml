@@ -44,7 +44,7 @@ targets:
         PRODUCT_NAME: Workout
         DEVELOPMENT_TEAM: E393H8D2JP
         CODE_SIGN_ENTITLEMENTS: Workout/Workout.entitlements
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         # Manual signing via fastlane match. Profiles are installed by running
         # `fastlane match development|appstore` (see docs/CODE-SIGNING.md).
         CODE_SIGN_STYLE: Manual
