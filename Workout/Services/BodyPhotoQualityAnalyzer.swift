@@ -19,28 +19,74 @@ enum BodyPhotoQualityAnalyzer {
         let orientation = image.imageOrientation.cgImageOrientation
 
         return await Task.detached(priority: .userInitiated) {
-            let poseRequest = VNDetectHumanBodyPoseRequest()
-            let rectangleRequest = VNDetectHumanRectanglesRequest()
-            rectangleRequest.upperBodyOnly = false
-            let handler = VNImageRequestHandler(
-                cgImage: cgImage,
-                orientation: orientation
-            )
-
-            do {
-                try handler.perform([poseRequest, rectangleRequest])
-                guard let observation = selectPrimaryPose(from: poseRequest.results ?? []) else {
-                    return BodyPhotoQualityResult(warnings: ["没有检测到完整人物，请确保全身清楚入镜。"])
-                }
-                let humanBounds = matchingHumanBounds(
-                    for: observation,
-                    candidates: rectangleRequest.results ?? []
-                )
-                return evaluate(observation, humanBounds: humanBounds)
-            } catch {
-                return BodyPhotoQualityResult(warnings: ["暂时无法检查照片质量，你可以重拍或仍然使用。"])
-            }
+            let exposure = exposureWarnings(from: cgImage)
+            let poseWarnings = poseWarnings(cgImage: cgImage, orientation: orientation)
+            // Exposure is advisory and independent of pose; surface it alongside
+            // the pose warnings, de-duplicated and capped at three lines.
+            return BodyPhotoQualityResult(warnings: mergedWarnings(poseWarnings, exposure))
         }.value
+    }
+
+    private static func poseWarnings(
+        cgImage: CGImage,
+        orientation: CGImagePropertyOrientation
+    ) -> [String] {
+        let poseRequest = VNDetectHumanBodyPoseRequest()
+        let rectangleRequest = VNDetectHumanRectanglesRequest()
+        rectangleRequest.upperBodyOnly = false
+        let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation)
+
+        do {
+            try handler.perform([poseRequest, rectangleRequest])
+            guard let observation = selectPrimaryPose(from: poseRequest.results ?? []) else {
+                return ["没有检测到完整人物，请确保全身清楚入镜。"]
+            }
+            let humanBounds = matchingHumanBounds(
+                for: observation,
+                candidates: rectangleRequest.results ?? []
+            )
+            return evaluate(observation, humanBounds: humanBounds).warnings
+        } catch {
+            return ["暂时无法检查照片质量，你可以重拍或仍然使用。"]
+        }
+    }
+
+    private static func mergedWarnings(_ first: [String], _ second: [String]) -> [String] {
+        var result: [String] = []
+        for warning in first + second where !result.contains(warning) {
+            result.append(warning)
+        }
+        return Array(result.prefix(3))
+    }
+
+    /// Average-luminance exposure check. Renders a small grayscale copy and flags
+    /// photos that are too dark or blown out. Blur detection is intentionally not
+    /// included yet: it needs on-device calibration with real photos to avoid
+    /// false positives, and downscaling here would corrupt the blur signal.
+    static func exposureWarnings(from cgImage: CGImage) -> [String] {
+        let width = 64
+        let height = max(1, Int((Double(cgImage.height) / Double(cgImage.width) * Double(width)).rounded()))
+        var pixels = [UInt8](repeating: 0, count: width * height)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else {
+            return []
+        }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let mean = Double(pixels.reduce(0) { $0 + Int($1) }) / Double(pixels.count)
+
+        if mean < 45 {
+            return ["照片偏暗，请在更明亮的环境重新拍摄。"]
+        } else if mean > 220 {
+            return ["照片过亮或曝光过度，请避免强光直射后重新拍摄。"]
+        }
+        return []
     }
 
     private static func selectPrimaryPose(
