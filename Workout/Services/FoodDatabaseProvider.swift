@@ -47,6 +47,12 @@ enum FoodDatabaseError: LocalizedError, Equatable {
 struct FoodDatabaseConfiguration: Equatable {
     var endpoint: URL = URL(string: "https://world.openfoodfacts.org/api/v2/product/")!
     var timeout: TimeInterval = 8
+    // Open Food Facts asks every app to send an identifying User-Agent, otherwise
+    // requests may be throttled or blocked. See https://openfoodfacts.github.io/api-documentation/
+    var userAgent: String = {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1"
+        return "WorkoutApp/\(version) (减脂计划; https://github.com/lingfengmarskey/workout)"
+    }()
 }
 
 /// Remote adapter kept behind a protocol so the UI and tests never depend on
@@ -63,6 +69,7 @@ struct OpenFoodFactsProvider: FoodDatabaseProvider {
         let url = configuration.endpoint.appendingPathComponent(normalized)
         var request = URLRequest(url: url, timeoutInterval: configuration.timeout)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(configuration.userAgent, forHTTPHeaderField: "User-Agent")
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -109,6 +116,62 @@ enum BarcodeNormalizer {
         guard digits == trimmed,
               (8...14).contains(digits.count) else { return nil }
         return digits
+    }
+}
+
+/// On-disk cache for barcode lookups so a product resolves instantly the second
+/// time and still resolves when the network is down.
+struct BarcodeCacheStore {
+    static let standard = BarcodeCacheStore()
+
+    var defaults: UserDefaults = .standard
+    private let keyPrefix = "foodBarcodeCache."
+
+    private struct Entry: Codable {
+        let product: BarcodeFoodProduct
+        let savedAt: Date
+    }
+
+    func save(_ product: BarcodeFoodProduct, for barcode: String) {
+        guard let data = try? JSONEncoder().encode(Entry(product: product, savedAt: Date())) else { return }
+        defaults.set(data, forKey: keyPrefix + barcode)
+    }
+
+    /// Returns a cached product if present and newer than `maxAge` (pass
+    /// `.infinity` to accept any age, e.g. as an offline fallback).
+    func load(for barcode: String, maxAge: TimeInterval) -> BarcodeFoodProduct? {
+        guard let data = defaults.data(forKey: keyPrefix + barcode),
+              let entry = try? JSONDecoder().decode(Entry.self, from: data) else { return nil }
+        if maxAge != .infinity, Date().timeIntervalSince(entry.savedAt) > maxAge { return nil }
+        return entry.product
+    }
+}
+
+/// Wraps another provider with a cache: a fresh cache hit skips the network
+/// entirely (fewer requests), and if the base provider fails we fall back to a
+/// stale cached copy so scanning keeps working offline.
+struct CachingFoodDatabaseProvider: FoodDatabaseProvider {
+    let base: any FoodDatabaseProvider
+    var store: BarcodeCacheStore = .standard
+    var maxAge: TimeInterval = 60 * 60 * 24 * 30  // 30 days
+
+    func lookup(barcode: String) async throws -> BarcodeFoodProduct? {
+        guard let normalized = BarcodeNormalizer.normalize(barcode) else {
+            throw FoodDatabaseError.invalidBarcode
+        }
+        if let fresh = store.load(for: normalized, maxAge: maxAge) {
+            return fresh
+        }
+        do {
+            let product = try await base.lookup(barcode: normalized)
+            if let product { store.save(product, for: normalized) }
+            return product
+        } catch {
+            if let stale = store.load(for: normalized, maxAge: .infinity) {
+                return stale
+            }
+            throw error
+        }
     }
 }
 
