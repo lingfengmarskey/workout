@@ -32,12 +32,14 @@ struct ReferenceActivity {
 
 /// One equivalent-activity suggestion: roughly how long the activity would take
 /// to burn the given energy, expressed as a rounded minute interval.
-struct EquivalentActivity: Equatable {
+struct EquivalentActivity: Equatable, Identifiable {
     let name: String
     let systemImage: String
     let impact: ActivityImpactLevel
     let minMinutes: Int
     let maxMinutes: Int
+
+    var id: String { "\(name)-\(minMinutes)-\(maxMinutes)" }
 }
 
 /// Converts an amount of food energy into reference activity durations using the

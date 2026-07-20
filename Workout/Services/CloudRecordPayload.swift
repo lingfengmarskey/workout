@@ -163,6 +163,7 @@ struct CloudWorkoutPayload {
     let fatigueLevel: Int?
     let painDescription: String
     let note: String
+    let addedActivitiesJSON: String
 
     init(record: CKRecord) throws {
         identity = try CloudPayloadIdentity(record: record)
@@ -182,6 +183,7 @@ struct CloudWorkoutPayload {
         fatigueLevel = record.int("fatigueLevel")
         painDescription = record.string("painDescription") ?? ""
         note = record.string("note") ?? ""
+        addedActivitiesJSON = record.string("addedActivitiesJSON") ?? "[]"
     }
 }
 

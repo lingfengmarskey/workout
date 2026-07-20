@@ -85,6 +85,7 @@ enum CloudRecordCodec {
         set(record, "fatigueLevel", workout.fatigueLevel)
         set(record, "painDescription", workout.painDescription)
         set(record, "note", workout.note)
+        set(record, "addedActivitiesJSON", workout.addedActivitiesJSON)
         return record
     }
 

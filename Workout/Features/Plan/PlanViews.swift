@@ -126,12 +126,15 @@ struct MealPlanDetailView: View {
     @Bindable var plan: DailyMealPlan
     @Environment(\.modelContext) private var modelContext
     @Query private var foodTemplates: [FoodTemplate]
+    @Query private var workoutPlans: [DailyWorkoutPlan]
     /// Body weight (kg) used to convert energy into equivalent activity time.
     var bodyWeight: Double
     @State private var initialSyncFingerprint: String?
     @State private var editorRequest: ActualFoodEntryEditorRequest?
     @State private var templatePickerSlot: MealSlot?
     @State private var compoundMealRequest: CompoundMealEditorRequest?
+    @State private var pendingActivity: EquivalentActivity?
+    @State private var activityError: String?
 
     var body: some View {
         Form {
@@ -286,6 +289,24 @@ struct MealPlanDetailView: View {
                 onSave: upsertActualFoodEntry
             )
         }
+        .alert(item: $pendingActivity) { activity in
+            Alert(
+                title: Text("加入今日锻炼计划？"),
+                message: Text("\(activity.name) 建议约 \(activityIntervalText(activity))。将按区间中值加入当天的锻炼计划。"),
+                primaryButton: .default(Text("加入")) {
+                    addActivity(activity)
+                },
+                secondaryButton: .cancel(Text("暂不加入"))
+            )
+        }
+        .alert("无法加入活动", isPresented: Binding(
+            get: { activityError != nil },
+            set: { if !$0 { activityError = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(activityError ?? "")
+        }
     }
 
     @ViewBuilder
@@ -300,28 +321,80 @@ struct MealPlanDetailView: View {
                 Text("记录实际进食后显示等效活动参考。")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(suggestions, id: \.name) { activity in
-                    LabeledContent {
-                        Text(activityIntervalText(activity))
-                            .foregroundStyle(.secondary)
+                ForEach(suggestions) { activity in
+                    Button {
+                        pendingActivity = activity
                     } label: {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(activity.name)
-                                Text(activity.impact.displayName)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        HStack {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(activity.name)
+                                    Text(activity.impact.displayName)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                Image(systemName: activity.systemImage)
                             }
-                        } icon: {
-                            Image(systemName: activity.systemImage)
+                            Spacer()
+                            Text(activityIntervalText(activity))
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                         }
                     }
+                    .buttonStyle(.plain)
                 }
 
-                Text("等效活动参考仅供换算，实际消耗会受体重、速度、坡度、技术和设备影响。这不是必须完成的运动，也不建议靠运动抵消进食。")
+                Text("点击活动可将其加入今天的锻炼计划。等效活动参考仅供换算，实际消耗会受体重、速度、坡度、技术和设备影响。这不是必须完成的运动，也不建议靠运动抵消进食。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func addActivity(_ activity: EquivalentActivity) {
+        guard let workout = workoutPlans.first(where: {
+            $0.planID == plan.planID && Calendar.current.isDate($0.date, inSameDayAs: plan.date)
+        }) else {
+            activityError = "今天没有可追加的锻炼计划，请先创建或恢复今天的计划。"
+            return
+        }
+
+        let duration = max(activity.minMinutes, (activity.minMinutes + activity.maxMinutes) / 2)
+        let sourceEntryIDs = plan.actualFoodEntries.map(\.id)
+        let alreadyAdded = workout.addedActivities.contains {
+            $0.sourceMealPlanID == plan.id && $0.activityName == activity.name
+        }
+        guard !alreadyAdded else {
+            activityError = "这个活动已经加入今天的锻炼计划。"
+            return
+        }
+
+        var additions = workout.addedActivities
+        additions.append(
+            PlannedActivityAddition(
+                sourceMealPlanID: plan.id,
+                sourceFoodEntryIDs: sourceEntryIDs,
+                activityName: activity.name,
+                systemImage: activity.systemImage,
+                impact: activity.impact,
+                durationMinutes: duration,
+                estimatedCalories: plan.actualCalories
+            )
+        )
+        let originalAdditions = workout.addedActivities
+        let originalUpdatedAt = workout.updatedAt
+        let originalRevision = workout.syncRevision
+        workout.addedActivities = additions
+        do {
+            try modelContext.save()
+        } catch {
+            workout.addedActivities = originalAdditions
+            workout.updatedAt = originalUpdatedAt
+            workout.syncRevision = originalRevision
+            activityError = "追加活动保存失败，请重试。"
         }
     }
 
@@ -865,12 +938,14 @@ private struct ActualFoodEntryEditorView: View {
 
 struct WorkoutPlanDetailView: View {
     @Bindable var plan: DailyWorkoutPlan
+    @Environment(\.modelContext) private var modelContext
     @AppStorage("healthkit.steps.authorizationRequested") private var healthAuthorizationRequested = false
     @State private var isReadingHealthSteps = false
     @State private var importedSteps: Int?
     @State private var showOverwriteStepsConfirmation = false
     @State private var healthStepError: String?
     @State private var initialSyncFingerprint: String?
+    @State private var activityEditTarget: PlannedActivityAddition?
 
     var body: some View {
         Form {
@@ -892,6 +967,43 @@ struct WorkoutPlanDetailView: View {
 
             Section("有氧") {
                 Text(plan.cardioDescription)
+            }
+
+            if !plan.addedActivities.isEmpty {
+                Section("追加活动") {
+                    ForEach(plan.addedActivities) { activity in
+                        HStack(spacing: 12) {
+                            Button {
+                                setActivityCompletion(activity, completed: !activity.isCompleted)
+                            } label: {
+                                Image(systemName: activity.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(activity.isCompleted ? .green : .secondary)
+                            }
+                            .buttonStyle(.plain)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(activity.activityName)
+                                    .strikethrough(activity.isCompleted)
+                                Text("来源：实际进食记录 · 约 \(activity.estimatedCalories.formatted(.number.precision(.fractionLength(0)))) kcal")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                activityEditTarget = activity
+                            } label: {
+                                Text("\(activity.durationMinutes) 分钟")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                    .onDelete { offsets in
+                        deleteActivities(at: offsets)
+                    }
+                }
             }
 
             Section("拉伸与放松") {
@@ -976,6 +1088,20 @@ struct WorkoutPlanDetailView: View {
         } message: {
             Text("当前已记录 \(plan.actualSteps ?? 0) 步，健康 App 读取到 \(importedSteps ?? 0) 步。")
         }
+        .confirmationDialog("修改追加活动", item: $activityEditTarget) { activity in
+            Button("减少 5 分钟") {
+                adjustActivityDuration(activity, by: -5)
+            }
+            Button("增加 5 分钟") {
+                adjustActivityDuration(activity, by: 5)
+            }
+            Button("删除活动", role: .destructive) {
+                deleteActivity(activity)
+            }
+            Button("取消", role: .cancel) {}
+        } message: { activity in
+            Text("当前时长：\(activity.durationMinutes) 分钟")
+        }
         .alert("无法同步步数", isPresented: Binding(
             get: { healthStepError != nil },
             set: { if !$0 { healthStepError = nil } }
@@ -983,6 +1109,49 @@ struct WorkoutPlanDetailView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(healthStepError ?? "")
+        }
+    }
+
+    private func setActivityCompletion(_ activity: PlannedActivityAddition, completed: Bool) {
+        mutateActivities { values in
+            guard let index = values.firstIndex(where: { $0.id == activity.id }) else { return }
+            values[index].isCompleted = completed
+        }
+    }
+
+    private func adjustActivityDuration(_ activity: PlannedActivityAddition, by delta: Int) {
+        mutateActivities { values in
+            guard let index = values.firstIndex(where: { $0.id == activity.id }) else { return }
+            values[index].durationMinutes = max(5, values[index].durationMinutes + delta)
+        }
+    }
+
+    private func deleteActivity(_ activity: PlannedActivityAddition) {
+        mutateActivities { values in
+            values.removeAll { $0.id == activity.id }
+        }
+    }
+
+    private func deleteActivities(at offsets: IndexSet) {
+        mutateActivities { values in
+            values.remove(atOffsets: offsets)
+        }
+    }
+
+    private func mutateActivities(_ transform: (inout [PlannedActivityAddition]) -> Void) {
+        let previous = plan.addedActivities
+        let previousUpdatedAt = plan.updatedAt
+        let previousRevision = plan.syncRevision
+        var values = previous
+        transform(&values)
+        plan.addedActivities = values
+        do {
+            try modelContext.save()
+        } catch {
+            plan.addedActivities = previous
+            plan.updatedAt = previousUpdatedAt
+            plan.syncRevision = previousRevision
+            healthStepError = "追加活动保存失败，请重试。"
         }
     }
 
@@ -1031,4 +1200,5 @@ struct WorkoutPlanDetailView: View {
         ].joined(separator: "|")
     }
 }
+
 

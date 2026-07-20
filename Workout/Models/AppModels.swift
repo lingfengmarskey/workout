@@ -70,6 +70,49 @@ enum FoodDataSource: String, Codable {
     case database
 }
 
+/// A user-confirmed activity added to a daily workout plan after reviewing
+/// an equivalent-activity suggestion for an actual meal.
+struct PlannedActivityAddition: Codable, Equatable, Identifiable {
+    var id: UUID
+    var sourceMealPlanID: UUID
+    var sourceFoodEntryIDs: [UUID]
+    var activityName: String
+    var systemImage: String
+    var impactRaw: String
+    var durationMinutes: Int
+    var estimatedCalories: Double
+    var isCompleted: Bool
+    var createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        sourceMealPlanID: UUID,
+        sourceFoodEntryIDs: [UUID],
+        activityName: String,
+        systemImage: String,
+        impact: ActivityImpactLevel,
+        durationMinutes: Int,
+        estimatedCalories: Double,
+        isCompleted: Bool = false,
+        createdAt: Date = .now
+    ) {
+        self.id = id
+        self.sourceMealPlanID = sourceMealPlanID
+        self.sourceFoodEntryIDs = sourceFoodEntryIDs
+        self.activityName = activityName
+        self.systemImage = systemImage
+        self.impactRaw = impact.rawValue
+        self.durationMinutes = durationMinutes
+        self.estimatedCalories = estimatedCalories
+        self.isCompleted = isCompleted
+        self.createdAt = createdAt
+    }
+
+    var impact: ActivityImpactLevel {
+        ActivityImpactLevel(rawValue: impactRaw) ?? .low
+    }
+}
+
 struct ActualFoodEntry: Codable, Equatable, Identifiable {
     var id: UUID
     /// Optional link to the template used to create this entry. Nutrition fields
@@ -380,7 +423,7 @@ final class DailyWorkoutPlan {
 typealias WeightLossPlan = WorkoutSchemaV4.WeightLossPlan
 typealias DailyBodyRecord = WorkoutSchemaV4.DailyBodyRecord
 typealias DailyMealPlan = WorkoutSchemaV5.DailyMealPlan
-typealias DailyWorkoutPlan = WorkoutSchemaV4.DailyWorkoutPlan
+// DailyWorkoutPlan is declared by WorkoutSchemaV8 in AppModelsV8.swift.
 typealias SyncTombstone = WorkoutSchemaV4.SyncTombstone
 typealias CloudSyncState = WorkoutSchemaV4.CloudSyncState
 typealias FoodTemplate = WorkoutSchemaV6.FoodTemplate
