@@ -53,4 +53,26 @@ final class EquivalentActivityTests: XCTestCase {
         XCTAssertTrue(EquivalentActivityCalculator.suggestions(forCalories: 0, weightKg: 80).isEmpty)
         XCTAssertTrue(EquivalentActivityCalculator.suggestions(forCalories: 400, weightKg: 0).isEmpty)
     }
+    func testPlannedActivityAdditionRoundTripsSourceLinks() throws {
+        let mealID = UUID()
+        let foodID = UUID()
+        let addition = PlannedActivityAddition(
+            sourceMealPlanID: mealID,
+            sourceFoodEntryIDs: [foodID],
+            activityName: "快走",
+            systemImage: "figure.walk",
+            impact: .low,
+            durationMinutes: 25,
+            estimatedCalories: 320
+        )
+
+        let data = try JSONEncoder().encode(addition)
+        let decoded = try JSONDecoder().decode(PlannedActivityAddition.self, from: data)
+
+        XCTAssertEqual(decoded, addition)
+        XCTAssertEqual(decoded.sourceMealPlanID, mealID)
+        XCTAssertEqual(decoded.sourceFoodEntryIDs, [foodID])
+        XCTAssertEqual(decoded.durationMinutes, 25)
+    }
+
 }
