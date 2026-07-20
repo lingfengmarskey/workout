@@ -40,11 +40,26 @@ jobs:
           echo "name=$simulator_name" >> "$GITHUB_OUTPUT"
           echo "Using simulator: $simulator_name"
 
+      - name: Build (Release configuration)
+        # Debug is exercised by the test step below; build Release too so a
+        # configuration-specific compile error (or a SwiftUI type-check timeout)
+        # cannot reach main just because Debug happened to compile.
+        run: |
+          xcodebuild build \
+            -project Workout.xcodeproj \
+            -scheme Workout \
+            -configuration Release \
+            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}" \
+            -derivedDataPath "$RUNNER_TEMP/WorkoutReleaseBuild" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
       - name: Run unit tests
         run: |
           xcodebuild test \
             -project Workout.xcodeproj \
             -scheme Workout \
+            -configuration Debug \
             -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}" \
             -derivedDataPath "$RUNNER_TEMP/WorkoutDerivedData" \
             CODE_SIGNING_ALLOWED=NO \
