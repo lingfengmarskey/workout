@@ -420,7 +420,7 @@ final class DailyWorkoutPlan {
 typealias WeightLossPlan = WorkoutSchemaV4.WeightLossPlan
 typealias DailyBodyRecord = WorkoutSchemaV4.DailyBodyRecord
 typealias DailyMealPlan = WorkoutSchemaV5.DailyMealPlan
-typealias DailyWorkoutPlan = WorkoutSchemaV4.DailyWorkoutPlan
+// DailyWorkoutPlan is declared by WorkoutSchemaV8 in AppModelsV8.swift.
 typealias SyncTombstone = WorkoutSchemaV4.SyncTombstone
 typealias CloudSyncState = WorkoutSchemaV4.CloudSyncState
 typealias FoodTemplate = WorkoutSchemaV6.FoodTemplate
