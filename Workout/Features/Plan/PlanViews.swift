@@ -385,13 +385,15 @@ struct MealPlanDetailView: View {
             )
         )
         let originalAdditions = workout.addedActivities
+        let originalUpdatedAt = workout.updatedAt
+        let originalRevision = workout.syncRevision
         workout.addedActivities = additions
-        workout.updatedAt = .now
-        workout.syncRevision += 1
         do {
             try modelContext.save()
         } catch {
             workout.addedActivities = originalAdditions
+            workout.updatedAt = originalUpdatedAt
+            workout.syncRevision = originalRevision
             activityError = "追加活动保存失败，请重试。"
         }
     }
@@ -1138,6 +1140,8 @@ struct WorkoutPlanDetailView: View {
 
     private func mutateActivities(_ transform: (inout [PlannedActivityAddition]) -> Void) {
         let previous = plan.addedActivities
+        let previousUpdatedAt = plan.updatedAt
+        let previousRevision = plan.syncRevision
         var values = previous
         transform(&values)
         plan.addedActivities = values
@@ -1145,6 +1149,8 @@ struct WorkoutPlanDetailView: View {
             try modelContext.save()
         } catch {
             plan.addedActivities = previous
+            plan.updatedAt = previousUpdatedAt
+            plan.syncRevision = previousRevision
             healthStepError = "追加活动保存失败，请重试。"
         }
     }
