@@ -31,7 +31,7 @@ struct FoodTemplatePickerView: View {
         onManualEntry: @escaping () -> Void,
         onSelectCompound: @escaping (CompoundMealTemplate) -> Void = { _ in },
         onPhotoEstimate: @escaping ([ActualFoodEntry]) -> Void = { _ in },
-        barcodeProvider: any FoodDatabaseProvider = OpenFoodFactsProvider()
+        barcodeProvider: any FoodDatabaseProvider = CachingFoodDatabaseProvider(base: OpenFoodFactsProvider())
     ) {
         self.mealSlot = mealSlot
         self.onSelect = onSelect
