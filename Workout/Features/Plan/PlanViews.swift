@@ -384,10 +384,16 @@ struct MealPlanDetailView: View {
                 estimatedCalories: plan.actualCalories
             )
         )
+        let originalAdditions = workout.addedActivities
         workout.addedActivities = additions
         workout.updatedAt = .now
         workout.syncRevision += 1
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            workout.addedActivities = originalAdditions
+            activityError = "追加活动保存失败，请重试。"
+        }
     }
 
     private func activityIntervalText(_ activity: EquivalentActivity) -> String {
@@ -930,12 +936,14 @@ private struct ActualFoodEntryEditorView: View {
 
 struct WorkoutPlanDetailView: View {
     @Bindable var plan: DailyWorkoutPlan
+    @Environment(\.modelContext) private var modelContext
     @AppStorage("healthkit.steps.authorizationRequested") private var healthAuthorizationRequested = false
     @State private var isReadingHealthSteps = false
     @State private var importedSteps: Int?
     @State private var showOverwriteStepsConfirmation = false
     @State private var healthStepError: String?
     @State private var initialSyncFingerprint: String?
+    @State private var activityEditTarget: PlannedActivityAddition?
 
     var body: some View {
         Form {
@@ -962,15 +970,36 @@ struct WorkoutPlanDetailView: View {
             if !plan.addedActivities.isEmpty {
                 Section("追加活动") {
                     ForEach(plan.addedActivities) { activity in
-                        LabeledContent {
-                            Text("\(activity.durationMinutes) 分钟")
-                                .foregroundStyle(.secondary)
-                        } label: {
-                            Label(activity.activityName, systemImage: activity.systemImage)
+                        HStack(spacing: 12) {
+                            Button {
+                                setActivityCompletion(activity, completed: !activity.isCompleted)
+                            } label: {
+                                Image(systemName: activity.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(activity.isCompleted ? .green : .secondary)
+                            }
+                            .buttonStyle(.plain)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(activity.activityName)
+                                    .strikethrough(activity.isCompleted)
+                                Text("来源：实际进食记录 · 约 \(activity.estimatedCalories.formatted(.number.precision(.fractionLength(0)))) kcal")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                activityEditTarget = activity
+                            } label: {
+                                Text("\(activity.durationMinutes) 分钟")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
                         }
-                        Text("来源：实际进食记录 · 约 \(activity.estimatedCalories.formatted(.number.precision(.fractionLength(0)))) kcal")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    }
+                    .onDelete { offsets in
+                        deleteActivities(at: offsets)
                     }
                 }
             }
@@ -1057,6 +1086,20 @@ struct WorkoutPlanDetailView: View {
         } message: {
             Text("当前已记录 \(plan.actualSteps ?? 0) 步，健康 App 读取到 \(importedSteps ?? 0) 步。")
         }
+        .confirmationDialog("修改追加活动", item: $activityEditTarget) { activity in
+            Button("减少 5 分钟") {
+                adjustActivityDuration(activity, by: -5)
+            }
+            Button("增加 5 分钟") {
+                adjustActivityDuration(activity, by: 5)
+            }
+            Button("删除活动", role: .destructive) {
+                deleteActivity(activity)
+            }
+            Button("取消", role: .cancel) {}
+        } message: { activity in
+            Text("当前时长：\(activity.durationMinutes) 分钟")
+        }
         .alert("无法同步步数", isPresented: Binding(
             get: { healthStepError != nil },
             set: { if !$0 { healthStepError = nil } }
@@ -1064,6 +1107,45 @@ struct WorkoutPlanDetailView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(healthStepError ?? "")
+        }
+    }
+
+    private func setActivityCompletion(_ activity: PlannedActivityAddition, completed: Bool) {
+        mutateActivities { values in
+            guard let index = values.firstIndex(where: { $0.id == activity.id }) else { return }
+            values[index].isCompleted = completed
+        }
+    }
+
+    private func adjustActivityDuration(_ activity: PlannedActivityAddition, by delta: Int) {
+        mutateActivities { values in
+            guard let index = values.firstIndex(where: { $0.id == activity.id }) else { return }
+            values[index].durationMinutes = max(5, values[index].durationMinutes + delta)
+        }
+    }
+
+    private func deleteActivity(_ activity: PlannedActivityAddition) {
+        mutateActivities { values in
+            values.removeAll { $0.id == activity.id }
+        }
+    }
+
+    private func deleteActivities(at offsets: IndexSet) {
+        mutateActivities { values in
+            values.remove(atOffsets: offsets)
+        }
+    }
+
+    private func mutateActivities(_ transform: (inout [PlannedActivityAddition]) -> Void) {
+        let previous = plan.addedActivities
+        var values = previous
+        transform(&values)
+        plan.addedActivities = values
+        do {
+            try modelContext.save()
+        } catch {
+            plan.addedActivities = previous
+            healthStepError = "追加活动保存失败，请重试。"
         }
     }
 
