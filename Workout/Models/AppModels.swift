@@ -81,6 +81,7 @@ struct PlannedActivityAddition: Codable, Equatable, Identifiable {
     var impactRaw: String
     var durationMinutes: Int
     var estimatedCalories: Double
+    var isCompleted: Bool
     var createdAt: Date
 
     init(
@@ -92,6 +93,7 @@ struct PlannedActivityAddition: Codable, Equatable, Identifiable {
         impact: ActivityImpactLevel,
         durationMinutes: Int,
         estimatedCalories: Double,
+        isCompleted: Bool = false,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -102,6 +104,7 @@ struct PlannedActivityAddition: Codable, Equatable, Identifiable {
         self.impactRaw = impact.rawValue
         self.durationMinutes = durationMinutes
         self.estimatedCalories = estimatedCalories
+        self.isCompleted = isCompleted
         self.createdAt = createdAt
     }
 
