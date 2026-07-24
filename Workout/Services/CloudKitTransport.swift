@@ -26,6 +26,11 @@ struct CloudModifyBatchResult {
 actor CloudKitTransport {
     static let shared = CloudKitTransport()
 
+    // CloudKit rejects a single fetch/modify operation with more than 400 items
+    // ("your request contains N items which is more than the maximum ... (400)").
+    // Stay well under so large syncs are split into several operations.
+    static let maxBatchSize = 200
+
     private let database: CKDatabase
 
     init(container: CKContainer = CKContainer(identifier: CloudKitConstants.containerIdentifier)) {
@@ -80,13 +85,15 @@ actor CloudKitTransport {
         guard !recordIDs.isEmpty else {
             return CloudRecordLookupBatch(recordsByID: [:], errorsByID: [:])
         }
-        let results = try await database.records(for: recordIDs)
         var records: [CKRecord.ID: CKRecord] = [:]
         var errors: [CKRecord.ID: Error] = [:]
-        for (id, result) in results {
-            switch result {
-            case let .success(record): records[id] = record
-            case let .failure(error): errors[id] = error
+        for chunk in recordIDs.chunked(into: Self.maxBatchSize) {
+            let results = try await database.records(for: chunk)
+            for (id, result) in results {
+                switch result {
+                case let .success(record): records[id] = record
+                case let .failure(error): errors[id] = error
+                }
             }
         }
         return CloudRecordLookupBatch(recordsByID: records, errorsByID: errors)
@@ -99,28 +106,44 @@ actor CloudKitTransport {
         guard !records.isEmpty || !recordIDs.isEmpty else {
             return CloudModifyBatchResult(savedRecords: [:], saveErrors: [:], deletedRecordIDs: [], deleteErrors: [:])
         }
-        let results = try await database.modifyRecords(
-            saving: records,
-            deleting: recordIDs,
-            savePolicy: .ifServerRecordUnchanged,
-            atomically: false
-        )
+
         var saved: [CKRecord.ID: CKRecord] = [:]
         var saveErrors: [CKRecord.ID: Error] = [:]
-        for (id, result) in results.saveResults {
-            switch result {
-            case let .success(record): saved[id] = record
-            case let .failure(error): saveErrors[id] = error
-            }
-        }
         var deleted = Set<CKRecord.ID>()
         var deleteErrors: [CKRecord.ID: Error] = [:]
-        for (id, result) in results.deleteResults {
-            switch result {
-            case .success: deleted.insert(id)
-            case let .failure(error): deleteErrors[id] = error
+
+        // Split into per-operation batches under CloudKit's 400-item limit.
+        // atomically:false, so saves and deletes need not share an operation.
+        for chunk in records.chunked(into: Self.maxBatchSize) {
+            let results = try await database.modifyRecords(
+                saving: chunk,
+                deleting: [],
+                savePolicy: .ifServerRecordUnchanged,
+                atomically: false
+            )
+            for (id, result) in results.saveResults {
+                switch result {
+                case let .success(record): saved[id] = record
+                case let .failure(error): saveErrors[id] = error
+                }
             }
         }
+
+        for chunk in recordIDs.chunked(into: Self.maxBatchSize) {
+            let results = try await database.modifyRecords(
+                saving: [],
+                deleting: chunk,
+                savePolicy: .ifServerRecordUnchanged,
+                atomically: false
+            )
+            for (id, result) in results.deleteResults {
+                switch result {
+                case .success: deleted.insert(id)
+                case let .failure(error): deleteErrors[id] = error
+                }
+            }
+        }
+
         return CloudModifyBatchResult(
             savedRecords: saved,
             saveErrors: saveErrors,
@@ -202,5 +225,16 @@ enum CloudChangeTokenStore {
     static func decode(_ data: Data?) throws -> CKServerChangeToken? {
         guard let data else { return nil }
         return try NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: data)
+    }
+}
+
+extension Array {
+    /// Splits the array into sub-arrays of at most `size` elements, preserving
+    /// order. Used to keep CloudKit operations under the 400-item limit.
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return isEmpty ? [] : [self] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
     }
 }
